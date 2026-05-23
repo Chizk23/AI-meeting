@@ -88,17 +88,83 @@ def update_admin_user_role_payload(
     return format_user_payload(user)
 
 
+def _reassign_resources_to_org_admin(db: Session, deleted_user: models.User) -> List[Dict[str, Any]]:
+    """For each organization the soft-deleted user belongs to, transfer the
+    active resources they own (meetings, action items created by them) to one
+    of the org's org-admins. Returns a list of {org_id, new_owner_id, counts}
+    for audit logging. We never reassign across organizations and we skip if
+    no org-admin exists in that org.
+    """
+    reassignments: List[Dict[str, Any]] = []
+    user_orgs = db.query(models.UserOrganization).filter(
+        models.UserOrganization.user_id == deleted_user.id,
+    ).all()
+    for membership in user_orgs:
+        org_admin = (
+            db.query(models.UserOrganization)
+            .filter(
+                models.UserOrganization.organization_id == membership.organization_id,
+                models.UserOrganization.role == "org-admin",
+                models.UserOrganization.user_id != deleted_user.id,
+            )
+            .first()
+        )
+        if not org_admin:
+            continue
+        new_owner_id = org_admin.user_id
+        meetings_q = db.query(models.Meeting).filter(
+            models.Meeting.organization_id == membership.organization_id,
+            models.Meeting.created_by == deleted_user.id,
+        )
+        meeting_count = meetings_q.count()
+        meetings_q.update({models.Meeting.created_by: new_owner_id}, synchronize_session=False)
+
+        action_items_q = db.query(models.ActionItem).filter(
+            models.ActionItem.created_by == deleted_user.id,
+        )
+        action_item_count = action_items_q.count()
+        action_items_q.update({models.ActionItem.created_by: new_owner_id}, synchronize_session=False)
+
+        reassignments.append({
+            "organization_id": membership.organization_id,
+            "new_owner_id": new_owner_id,
+            "meetings": meeting_count,
+            "action_items": action_item_count,
+        })
+    db.commit()
+    return reassignments
+
+
 def delete_admin_user_payload(user_id: str, db: Session, current_user: models.User) -> Dict[str, Any]:
     require_system_admin_user(current_user)
-    user = update_user(db, user_id, {"is_active": False})
+    user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    user = update_user(db, user_id, {"is_active": False})
+    reassignments = _reassign_resources_to_org_admin(db, user)
+
     append_admin_audit_log(
         actor=current_user.username,
         action="DELETE_USER",
         target=user.email,
     )
-    return {"detail": "User deactivated", "user_id": user_id}
+    for entry in reassignments:
+        append_admin_audit_log(
+            actor=current_user.username,
+            action="REASSIGN_OWNERSHIP",
+            target=(
+                f"org={entry['organization_id']} new_owner={entry['new_owner_id']} "
+                f"meetings={entry['meetings']} action_items={entry['action_items']}"
+            ),
+        )
+    return {
+        "detail": "User deactivated",
+        "user_id": user_id,
+        "reassignments": reassignments,
+    }
 
 
 def get_admin_ai_services_payload(current_user: models.User) -> Dict[str, Any]:
