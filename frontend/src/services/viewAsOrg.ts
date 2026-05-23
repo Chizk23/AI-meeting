@@ -51,18 +51,26 @@ export async function beginViewAsOrg(org: { id: string; name: string }): Promise
 
 /**
  * End view-as session: posts the audit-log row, then clears the banner.
+ *
+ * Local UI state is ALWAYS cleared (banner disappears) so the user can
+ * never get stuck in a stale view-as mode. If the backend DELETE fails
+ * (audit row not written), the error is rethrown so the caller can show
+ * an accurate toast — otherwise the success path is misleading.
  */
 export async function endViewAsOrg(): Promise<void> {
   const current = getViewAsOrg();
+  let backendError: unknown = null;
   if (current) {
     try {
       await api.delete(`/api/admin/view-as-org/${current.organization_id}`);
-    } catch {
-      // even if the DELETE fails, we still clear locally so the user
-      // isn't stuck in a stale UI mode.
+    } catch (err) {
+      backendError = err;
     }
   }
   setViewAsOrgState(null);
+  if (backendError) {
+    throw backendError;
+  }
 }
 
 /**
