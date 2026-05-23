@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import auth, models
+from .core.admin_runtime import append_admin_audit_log
 from .database import get_db
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -1262,6 +1263,13 @@ async def generate_export(
         with open(file_path, "wb") as handle:
             handle.write(file_content)
 
+        append_admin_audit_log(
+            actor=current_user.username,
+            action="EXPORT_MEETING",
+            target=f"{meeting.title} ({export_format})",
+            role=current_user.role or "member",
+            org=getattr(meeting.organization, "name", "") or "System",
+        )
         return ExportResponse(
             download_url=f"/api/export/download/{filename}?meeting_id={meeting.id}",
             filename=filename,
