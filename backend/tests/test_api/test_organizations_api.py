@@ -415,3 +415,35 @@ def test_admin_organizations_requires_system_admin(client: TestClient, db_sessio
     member = make_user(db_session, "regular_member", "regular_member@example.com")
     res = client.get("/api/admin/organizations", headers=auth_headers(client, member.username))
     assert res.status_code == 403
+
+
+def test_admin_organizations_filter_paginates_after_filter(client: TestClient, db_session: Session):
+    """Regression test for review bot finding: pagination must happen AFTER the
+    Python-level approval_status filter, not before. Create 25 active orgs +
+    a single pending org positioned at the END of the natural list, then ask
+    for ?status=pending&limit=10 — the pending org must still be returned.
+    """
+    sysadmin = make_user(db_session, "page_sysadmin", "page_sysadmin@example.com", role="system-admin")
+
+    # Create 25 active orgs first so they fill the "first page" of the natural
+    # ordering returned by get_organizations.
+    for i in range(25):
+        create_organization(
+            db_session,
+            {"name": f"Active {i:02d}", "settings": {"approval_status": "active"}},
+        )
+    # Then 1 pending org that lands AFTER all the actives.
+    pending = create_organization(
+        db_session,
+        {"name": "Late Pending", "settings": {"approval_status": "pending"}},
+    )
+
+    headers = auth_headers(client, sysadmin.username)
+    res = client.get("/api/admin/organizations?status=pending&limit=10", headers=headers)
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    # Before the fix this would return [] because skip/limit was applied
+    # before the python filter. After the fix the pending org is in the result.
+    assert any(item["id"] == pending.id for item in payload), (
+        "pending org positioned after pagination window must still be returned"
+    )

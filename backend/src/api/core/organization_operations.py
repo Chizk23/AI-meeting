@@ -84,7 +84,15 @@ def admin_list_organizations_payload(
     db: Session,
     current_user: models.User,
 ) -> List[schemas.Organization]:
-    """Admin-only listing of organizations with optional approval_status filter."""
+    """Admin-only listing of organizations with optional approval_status filter.
+
+    approval_status lives inside the JSON ``settings`` column, so we cannot
+    push the filter down to SQL portably. To avoid the pagination bug where
+    SQL OFFSET/LIMIT slices the data before the Python filter runs, when a
+    real status_filter is supplied we fetch the full set (capped at a large
+    safety limit), filter in Python, then apply skip/limit. When no filter
+    is supplied (or status == "all") we can paginate at the SQL level.
+    """
     if current_user.role != "system-admin":
         raise HTTPException(status_code=403, detail="System admin access required")
     if status_filter and status_filter != "all" and status_filter not in ALLOWED_APPROVAL_STATUSES:
@@ -92,10 +100,18 @@ def admin_list_organizations_payload(
             status_code=400,
             detail=f"status must be one of: all, {', '.join(sorted(ALLOWED_APPROVAL_STATUSES))}",
         )
+
+    if status_filter and status_filter != "all":
+        # Fetch a generous slice (10k orgs is far beyond realistic admin views)
+        # and filter in Python, then apply skip/limit on the filtered list.
+        orgs = get_organizations(db, skip=0, limit=10_000)
+        enriched = [enrich_organization_payload(org) for org in orgs]
+        filtered = [item for item in enriched if item.get("approval_status") == status_filter]
+        page = filtered[skip : skip + limit]
+        return [schemas.Organization.model_validate(item) for item in page]
+
     orgs = get_organizations(db, skip=skip, limit=limit)
     enriched = [enrich_organization_payload(org) for org in orgs]
-    if status_filter and status_filter != "all":
-        enriched = [item for item in enriched if item.get("approval_status") == status_filter]
     return [schemas.Organization.model_validate(item) for item in enriched]
 
 
