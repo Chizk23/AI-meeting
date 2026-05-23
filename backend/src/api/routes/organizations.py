@@ -7,6 +7,7 @@ from src.api import auth, schemas
 from src.api.core.organization_operations import (
     accept_invitation_by_id_payload,
     accept_invitation_by_token_payload,
+    admin_list_organizations_payload,
     approve_organization_payload,
     create_bulk_invitations_payload,
     create_invitation_payload,
@@ -23,6 +24,7 @@ from src.api.core.organization_operations import (
     suspend_organization_payload,
     update_organization_payload,
 )
+from typing import Optional
 from src.api.database import get_db
 
 router = APIRouter(tags=["organizations"])
@@ -47,6 +49,17 @@ def create_organization(
     current_user=Depends(auth.get_current_user),
 ):
     return create_organization_payload(org_data, db, current_user)
+
+
+@router.get("/api/admin/organizations", response_model=Any)
+def admin_list_organizations(
+    status: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    return admin_list_organizations_payload(status, skip, limit, db, current_user)
 
 
 @router.post("/api/admin/organizations/{org_id}/approve", response_model=schemas.Organization)

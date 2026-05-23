@@ -11,10 +11,13 @@ from src.api.core.admin_runtime import (
     ADMIN_BROADCAST_HISTORY,
     ADMIN_PROMPTS,
     ADMIN_SYSTEM_SETTINGS,
-    _save_admin_prompts,
-    _save_admin_settings,
     append_admin_audit_log,
+    delete_admin_broadcast,
+    ensure_admin_runtime_tables,
     ensure_audit_log_table,
+    persist_admin_broadcast,
+    persist_admin_prompt,
+    persist_admin_setting,
 )
 from src.api.core.notifications_support import create_persisted_notification
 from src.api.core.upload_jobs import feature_flags_for_user
@@ -214,7 +217,7 @@ def update_admin_prompt_payload(
 ) -> Dict[str, Any]:
     require_system_admin_user(current_user)
     next_version = payload.get("version") or ADMIN_PROMPTS.get(prompt_key, {}).get("version", "1.0.0")
-    ADMIN_PROMPTS[prompt_key] = {
+    prompt_record = {
         "key": prompt_key,
         "name": payload["name"],
         "description": payload.get("description"),
@@ -222,7 +225,8 @@ def update_admin_prompt_payload(
         "version": next_version,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
-    _save_admin_prompts()
+    persist_admin_prompt(prompt_key, prompt_record)
+    ADMIN_PROMPTS[prompt_key] = prompt_record
     append_admin_audit_log(actor=current_user.username, action="UPDATE_PROMPT", target=prompt_key)
     return ADMIN_PROMPTS[prompt_key]
 
@@ -273,6 +277,7 @@ def create_admin_broadcast_payload(
         )
     item["reach"] = len(recipients)
     db.commit()
+    persist_admin_broadcast(item, actor=current_user.username)
     ADMIN_BROADCAST_HISTORY.insert(0, item)
     append_admin_audit_log(actor=current_user.username, action="SEND_BROADCAST", target=item["target"])
     return item
@@ -280,9 +285,11 @@ def create_admin_broadcast_payload(
 
 def delete_admin_broadcast_payload(notification_id: str, current_user: models.User) -> Dict[str, str]:
     require_system_admin_user(current_user)
+    removed_from_db = delete_admin_broadcast(notification_id)
     before = len(ADMIN_BROADCAST_HISTORY)
     ADMIN_BROADCAST_HISTORY[:] = [item for item in ADMIN_BROADCAST_HISTORY if item.get("id") != notification_id]
-    if len(ADMIN_BROADCAST_HISTORY) == before:
+    removed_from_cache = len(ADMIN_BROADCAST_HISTORY) < before
+    if not removed_from_db and not removed_from_cache:
         raise HTTPException(status_code=404, detail="Notification not found")
     append_admin_audit_log(actor=current_user.username, action="DELETE_BROADCAST", target=notification_id)
     return {"message": "Notification deleted"}
@@ -326,8 +333,10 @@ def get_admin_settings_payload(current_user: models.User) -> Dict[str, Any]:
 def update_admin_settings_payload(payload: Mapping[str, Any], current_user: models.User) -> Dict[str, Any]:
     require_system_admin_user(current_user)
     for key, value in payload.items():
+        if value is None:
+            continue
         ADMIN_SYSTEM_SETTINGS[key] = value
-    _save_admin_settings()
+        persist_admin_setting(key, value)
     append_admin_audit_log(actor=current_user.username, action="UPDATE_SYSTEM_SETTINGS", target="admin.settings")
     return ADMIN_SYSTEM_SETTINGS
 

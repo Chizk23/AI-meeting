@@ -612,3 +612,77 @@ class AuditLog(Base):
         Index('idx_audit_logs_time', 'time'),
         Index('idx_audit_logs_action', 'action'),
     )
+
+
+class AdminSetting(Base):
+    """System-wide admin settings persisted as key/value rows."""
+    __tablename__ = "admin_settings"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, nullable=False)
+    updated_at: Mapped[DateTime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AdminPrompt(Base):
+    """Admin-managed AI prompts (one row per prompt key)."""
+    __tablename__ = "admin_prompts"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0.0")
+    last_updated: Mapped[DateTime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class AdminBroadcast(Base):
+    """History of admin broadcast notifications sent to users."""
+    __tablename__ = "admin_broadcasts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(String(50), nullable=False, default="info")
+    target: Mapped[str] = mapped_column(String(255), nullable=False, default="all")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="sent")
+    reach: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sent_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    sent_by: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        Index('idx_admin_broadcasts_sent_at', 'sent_at'),
+    )
+
+
+class Glossary(Base):
+    """Per-organization glossary entries used for STT vocabulary boost and
+    summary prompt expansion. system_wide=True (org_id NULL) glossaries apply
+    to every meeting in every org as a system default."""
+    __tablename__ = "glossaries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    organization_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True
+    )
+    term: Mapped[str] = mapped_column(String(255), nullable=False)
+    definition: Mapped[str] = mapped_column(Text, nullable=True)
+    aliases: Mapped[list] = mapped_column(JSON, nullable=True)
+    language: Mapped[str] = mapped_column(String(10), default="vi", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[DateTime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "term", "language", name="uq_glossary_org_term_lang"),
+        Index("idx_glossary_org", "organization_id"),
+        Index("idx_glossary_active", "is_active"),
+    )

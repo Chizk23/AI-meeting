@@ -47,7 +47,9 @@ const AdminOrganizations: React.FC = () => {
     setError('');
 
     try {
-      const response = await api.get('/api/organizations');
+      // System admin gets the dedicated admin endpoint which supports filtering
+      // by approval_status (pending/active/rejected/suspended/all).
+      const response = await api.get('/api/admin/organizations');
       setOrganizations(
         Array.isArray(response.data) ? response.data.map(normalizeOrganization) : [],
       );
