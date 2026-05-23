@@ -98,6 +98,37 @@ def test_org_audit_log_blocks_regular_member(client: TestClient, db_session):
     assert res.status_code == 403, res.text
 
 
+def test_org_audit_log_calls_ensure_audit_log_table(client: TestClient, db_session, monkeypatch):
+    """Regression for Devin Review on PR #6: the audit_logs table is created
+    on-demand (not via Base.metadata.create_all on prod startup outside of
+    ensure_admin_runtime_tables). The endpoint must call ensure_audit_log_table()
+    so a cold-start org-admin call does not 500 with OperationalError.
+    """
+    org_admin = make_user(db_session, "cold_oa", "cold_oa@example.com")
+    org = create_organization(db_session, {"name": "ColdStartOrg"})
+    add_user_to_organization(db_session, org_admin.id, org.id, "org-admin")
+
+    called = {"count": 0}
+
+    from src.api.core import admin_runtime as runtime
+
+    original = runtime.ensure_audit_log_table
+
+    def spy():
+        called["count"] += 1
+        original()
+
+    monkeypatch.setattr(runtime, "ensure_audit_log_table", spy)
+
+    token = login(client, org_admin.username)
+    res = client.get(
+        f"/api/organizations/{org.id}/audit-logs",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200, res.text
+    assert called["count"] == 1, "list_organization_audit_logs_payload must call ensure_audit_log_table()"
+
+
 def test_org_audit_log_allows_system_admin(client: TestClient, db_session):
     sysadmin = make_user(db_session, "sys_audit", "sys_audit@example.com", role="system-admin")
     org = create_organization(db_session, {"name": "SysOrgAudit"})

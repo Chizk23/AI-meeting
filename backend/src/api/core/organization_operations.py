@@ -652,7 +652,12 @@ def list_organization_audit_logs_payload(
     """Return audit_logs filtered to events whose ``org`` field matches the
     organization's name. Gated to system-admin OR an org-admin of this org.
     """
+    from src.api.core.admin_runtime import ensure_audit_log_table
+
     org = auth.require_org_admin(db, current_user, org_id)
+    # The audit_logs table is created on-demand (it's not in Base.metadata),
+    # so an early org-admin call before any system audit event must not 500.
+    ensure_audit_log_table()
     rows = (
         db.query(models.AuditLog)
         .filter(models.AuditLog.org == org.name)
