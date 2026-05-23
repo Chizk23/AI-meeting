@@ -43,6 +43,7 @@ from src.api.crud import add_meeting_participant, create_audio_file, create_meet
 from src.api.database import SessionLocal, get_db
 from src.cost.cost_logger import CostLogger
 from src.api.core.admin_operations import ADMIN_PROMPTS
+from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["stt"])
@@ -159,6 +160,26 @@ async def upload_audio(
             raise HTTPException(status_code=413, detail=f"File too large. Max size is {max_upload_size // (1024 * 1024)}MB")
     if not upload_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file")
+
+    storage_limit_gb = ADMIN_SYSTEM_SETTINGS.get("storage_limit_gb_per_org") or 0
+    try:
+        storage_limit_gb = int(storage_limit_gb)
+    except (TypeError, ValueError):
+        storage_limit_gb = 0
+    if storage_limit_gb > 0:
+        limit_bytes = storage_limit_gb * 1024 * 1024 * 1024
+        current_usage = db.query(func.coalesce(func.sum(models.AudioFile.file_size), 0)).join(
+            models.Meeting, models.AudioFile.meeting_id == models.Meeting.id
+        ).filter(models.Meeting.organization_id == organization_id).scalar() or 0
+        if current_usage + len(upload_bytes) > limit_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Organization storage quota exceeded "
+                    f"(limit: {storage_limit_gb} GB). "
+                    "Please delete old recordings or contact your administrator."
+                ),
+            )
 
     try:
         parsed_start = parse_optional_form_datetime(scheduled_start)
