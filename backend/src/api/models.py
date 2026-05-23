@@ -639,6 +639,28 @@ class AdminPrompt(Base):
     )
 
 
+class AdminPromptVersion(Base):
+    """Historical snapshots of admin_prompts rows. A row is appended every
+    time an admin updates a prompt so the previous state can be restored.
+    """
+    __tablename__ = "admin_prompt_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    prompt_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0.0")
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    created_by: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        Index("idx_admin_prompt_versions_key_created", "prompt_key", "created_at"),
+    )
+
+
 class AdminBroadcast(Base):
     """History of admin broadcast notifications sent to users."""
     __tablename__ = "admin_broadcasts"
