@@ -4,7 +4,6 @@ import api from '../../../services/api';
 import { toast } from '../../../components/ui/Toast';
 
 type SystemSettings = {
-  require_2fa_admin: boolean;
   public_registration_enabled: boolean;
   storage_limit_gb_per_org: number;
   transcript_retention_policy: string;
@@ -61,15 +60,6 @@ const AdminSettings: React.FC = () => {
       {error && <p className="mb-4 text-sm font-semibold text-red-500">{error}</p>}
 
       <div className="space-y-6">
-        <label className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 dark:text-slate-200">
-          Bat buoc 2FA cho admin
-          <input
-            type="checkbox"
-            checked={settings.require_2fa_admin}
-            onChange={(e) => updateField('require_2fa_admin', e.target.checked)}
-          />
-        </label>
-
         <label className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 dark:text-slate-200">
           Cho phep dang ky cong khai
           <input
