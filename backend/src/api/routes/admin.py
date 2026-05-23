@@ -60,8 +60,11 @@ class AdminSettingsUpdateRequest(BaseModel):
 
 
 @router.get("/api/admin/costs")
-async def get_costs():
-    return get_costs_payload()
+def get_costs(
+    db: Session = Depends(get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    return get_costs_payload(db, current_user)
 
 
 @router.get("/api/admin/stats")

@@ -640,3 +640,37 @@ def list_organization_members_payload(
         joinedload(models.User.group_memberships).joinedload(models.GroupMembership.group),
     ).join(models.UserOrganization).filter(models.UserOrganization.organization_id == org_id).all()
     return [format_user_payload(member) for member in members]
+
+
+def list_organization_audit_logs_payload(
+    org_id: str,
+    skip: int,
+    limit: int,
+    db: Session,
+    current_user: models.User,
+) -> List[Dict[str, Any]]:
+    """Return audit_logs filtered to events whose ``org`` field matches the
+    organization's name. Gated to system-admin OR an org-admin of this org.
+    """
+    org = auth.require_org_admin(db, current_user, org_id)
+    rows = (
+        db.query(models.AuditLog)
+        .filter(models.AuditLog.org == org.name)
+        .order_by(models.AuditLog.time.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "time": row.time.isoformat() if row.time else None,
+            "user": row.user,
+            "role": row.role,
+            "action": row.action,
+            "target": row.target,
+            "org": row.org,
+            "ip": row.ip,
+        }
+        for row in rows
+    ]

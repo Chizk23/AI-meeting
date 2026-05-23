@@ -425,8 +425,66 @@ def update_admin_settings_payload(payload: Mapping[str, Any], current_user: mode
     return ADMIN_SYSTEM_SETTINGS
 
 
-def get_costs_payload() -> None:
-    raise HTTPException(status_code=503, detail="Cost tracking temporarily disabled")
+def get_costs_payload(db: Session, current_user: models.User) -> Dict[str, Any]:
+    """Cost breakdown by organization.
+
+    Joins CostTracking → Meeting → Organization and groups cost rows by
+    organization. Rows whose meeting is missing or whose meeting has no
+    org collapse into an "unattributed" bucket (organization_id=None).
+    Only system-admins can call this.
+    """
+    require_system_admin_user(current_user)
+    from sqlalchemy import func as sa_func
+
+    rows = (
+        db.query(
+            models.Organization.id.label("org_id"),
+            models.Organization.name.label("org_name"),
+            models.CostTracking.service.label("service"),
+            sa_func.sum(models.CostTracking.cost_usd).label("total"),
+        )
+        .outerjoin(models.Meeting, models.CostTracking.meeting_id == models.Meeting.id)
+        .outerjoin(models.Organization, models.Meeting.organization_id == models.Organization.id)
+        .group_by(models.Organization.id, models.Organization.name, models.CostTracking.service)
+        .all()
+    )
+
+    grouped: Dict[Any, Dict[str, Any]] = {}
+    grand_total = 0.0
+    for org_id, org_name, service, total in rows:
+        total_f = float(total or 0)
+        grand_total += total_f
+        key = org_id  # None for unattributed
+        bucket = grouped.setdefault(
+            key,
+            {
+                "organization_id": org_id,
+                "organization_name": org_name or ("Unattributed" if org_id is None else "Unknown"),
+                "total_cost_usd": 0.0,
+                "by_service": {},
+            },
+        )
+        bucket["total_cost_usd"] += total_f
+        bucket["by_service"][service or "unknown"] = bucket["by_service"].get(service or "unknown", 0.0) + total_f
+
+    organizations = sorted(
+        grouped.values(),
+        key=lambda x: x["total_cost_usd"],
+        reverse=True,
+    )
+
+    return {
+        "currency": "USD",
+        "total_cost_usd": round(grand_total, 6),
+        "organizations": [
+            {
+                **org,
+                "total_cost_usd": round(org["total_cost_usd"], 6),
+                "by_service": {k: round(v, 6) for k, v in org["by_service"].items()},
+            }
+            for org in organizations
+        ],
+    }
 
 
 def get_feature_flags_payload(current_user: models.User) -> Dict[str, bool]:

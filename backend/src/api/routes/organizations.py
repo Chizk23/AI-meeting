@@ -15,6 +15,7 @@ from src.api.core.organization_operations import (
     delete_organization_payload,
     get_organization_payload,
     list_my_pending_invitations_payload,
+    list_organization_audit_logs_payload,
     list_organization_members_payload,
     list_organizations_payload,
     preview_invitation_payload,
@@ -195,3 +196,14 @@ def list_organization_members(
     current_user=Depends(auth.get_current_user),
 ):
     return list_organization_members_payload(org_id, db, current_user)
+
+
+@router.get("/api/organizations/{org_id}/audit-logs", response_model=List[Dict[str, Any]])
+def list_organization_audit_logs(
+    org_id: str,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    return list_organization_audit_logs_payload(org_id, skip, limit, db, current_user)
