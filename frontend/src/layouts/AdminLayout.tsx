@@ -20,13 +20,29 @@ import {
   History,
   Sparkles,
   LogOut,
+  Eye,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getViewAsOrg, endViewAsOrg, subscribeViewAsOrg } from '../services/viewAsOrg';
+import { toast } from '../components/ui/Toast';
 
 const AdminLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [viewAs, setViewAs] = React.useState(getViewAsOrg());
+  React.useEffect(() => subscribeViewAsOrg(() => setViewAs(getViewAsOrg())), []);
+
+  const handleExitViewAs = async () => {
+    try {
+      await endViewAsOrg();
+      toast.success('Da thoat che do view-as');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Khong thoat duoc che do view-as');
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -116,6 +132,22 @@ const AdminLayout: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex flex-1 flex-col overflow-hidden relative">
+        {viewAs && (
+          <div className="flex items-center justify-between gap-3 border-b border-amber-400 bg-amber-100 px-6 py-3 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <Eye size={16} />
+              Dang xem voi tu cach org-admin cua <span className="font-black">{viewAs.organization_name}</span> — moi hanh dong duoc ghi vao audit log.
+            </div>
+            <button
+              type="button"
+              onClick={handleExitViewAs}
+              className="inline-flex items-center gap-1 rounded-lg bg-amber-200 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-300 dark:bg-amber-800 dark:text-amber-100 dark:hover:bg-amber-700"
+            >
+              <X size={14} />
+              Thoat
+            </button>
+          </div>
+        )}
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-red-500/5 blur-[120px] rounded-full -mr-48 -mt-48 pointer-events-none" />
 

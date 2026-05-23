@@ -16,8 +16,10 @@ import {
   User as UserIcon,
   Shield,
   Lock,
-  Globe
+  Globe,
+  Eye,
 } from 'lucide-react';
+import { beginViewAsOrg } from '../../../services/viewAsOrg';
 import { clsx } from 'clsx';
 import api from '../../../services/api';
 import { normalizeOrganization, normalizeUser, normalizeGroup } from '../../../services/mappers';
@@ -137,6 +139,19 @@ const AdminOrganizations: React.FC = () => {
       toast.success('Đã từ chối tổ chức');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Không từ chối được tổ chức.');
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleEnterViewAs = async (org: Organization, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActionId(org.id);
+    try {
+      await beginViewAsOrg({ id: org.id, name: org.name });
+      toast.success(`Da vao che do view-as cua ${org.name}. Moi hanh dong duoc ghi vao audit log.`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Khong vao duoc che do view-as.');
     } finally {
       setActionId(null);
     }
@@ -670,14 +685,24 @@ const AdminOrganizations: React.FC = () => {
                   )}
 
                   {selectedOrg.approvalStatus === 'active' && (
-                    <button
-                      onClick={() => handleSuspend(selectedOrg.id)}
-                      disabled={actionId === selectedOrg.id}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900/30 dark:bg-amber-900/20 dark:text-amber-400"
-                    >
-                      <Ban size={16} />
-                      Tạm ngưng hoạt động
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleEnterViewAs(selectedOrg)}
+                        disabled={actionId === selectedOrg.id}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 py-3 text-sm font-bold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-900/30 dark:bg-indigo-900/20 dark:text-indigo-300"
+                      >
+                        <Eye size={16} />
+                        Xem nhu org-admin
+                      </button>
+                      <button
+                        onClick={() => handleSuspend(selectedOrg.id)}
+                        disabled={actionId === selectedOrg.id}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 py-3 text-sm font-bold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-900/30 dark:bg-amber-900/20 dark:text-amber-400"
+                      >
+                        <Ban size={16} />
+                        Tạm ngưng hoạt động
+                      </button>
+                    </>
                   )}
                   
                   {selectedOrg.approvalStatus === 'suspended' && (
