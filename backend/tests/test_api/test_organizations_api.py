@@ -373,3 +373,45 @@ def test_preview_pending_and_accept_invitation_flows(client: TestClient, db_sess
         headers=auth_headers(client, stranger.username),
     )
     assert mismatch_response.status_code == 400
+
+
+def test_admin_organizations_filter_by_status(client: TestClient, db_session: Session):
+    """GET /api/admin/organizations?status=pending must return only orgs with
+    approval_status=pending. Same for active, rejected, suspended, all."""
+    sysadmin = make_user(db_session, "filter_sysadmin", "filter_sysadmin@example.com", role="system-admin")
+
+    pending_org = create_organization(db_session, {"name": "Pending Co", "settings": {"approval_status": "pending"}})
+    active_org = create_organization(db_session, {"name": "Active Co", "settings": {"approval_status": "active"}})
+    rejected_org = create_organization(db_session, {"name": "Rejected Co", "settings": {"approval_status": "rejected"}})
+
+    headers = auth_headers(client, sysadmin.username)
+
+    pending_res = client.get("/api/admin/organizations?status=pending", headers=headers)
+    assert pending_res.status_code == 200, pending_res.text
+    pending_payload = pending_res.json()
+    assert all(item["approval_status"] == "pending" for item in pending_payload)
+    assert any(item["id"] == pending_org.id for item in pending_payload)
+
+    active_res = client.get("/api/admin/organizations?status=active", headers=headers)
+    assert active_res.status_code == 200
+    active_payload = active_res.json()
+    assert all(item["approval_status"] == "active" for item in active_payload)
+    assert any(item["id"] == active_org.id for item in active_payload)
+    assert not any(item["id"] == pending_org.id for item in active_payload)
+
+    rejected_res = client.get("/api/admin/organizations?status=rejected", headers=headers)
+    assert rejected_res.status_code == 200
+    assert any(item["id"] == rejected_org.id for item in rejected_res.json())
+
+    all_res = client.get("/api/admin/organizations", headers=headers)
+    assert all_res.status_code == 200
+    all_ids = {item["id"] for item in all_res.json()}
+    assert pending_org.id in all_ids
+    assert active_org.id in all_ids
+    assert rejected_org.id in all_ids
+
+
+def test_admin_organizations_requires_system_admin(client: TestClient, db_session: Session):
+    member = make_user(db_session, "regular_member", "regular_member@example.com")
+    res = client.get("/api/admin/organizations", headers=auth_headers(client, member.username))
+    assert res.status_code == 403

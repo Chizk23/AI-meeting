@@ -109,6 +109,13 @@ async def startup_event():
         _ensure_meeting_runtime_columns()
         _ensure_action_item_assignee_backfill()
 
+        from src.api.core.admin_runtime import (
+            ensure_admin_runtime_tables,
+            reload_admin_runtime_from_db,
+        )
+        ensure_admin_runtime_tables()
+        reload_admin_runtime_from_db()
+
         db_status = db_health_check()
         if db_status["status"] != "healthy":
             logger.error(f"Database health check failed: {db_status}")

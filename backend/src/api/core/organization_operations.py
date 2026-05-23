@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import or_
@@ -72,6 +72,31 @@ def list_organizations_payload(
     else:
         orgs = [membership.organization for membership in current_user.user_organizations]
     return [schemas.Organization.model_validate(enrich_organization_payload(org)) for org in orgs]
+
+
+ALLOWED_APPROVAL_STATUSES = {"pending", "active", "rejected", "suspended"}
+
+
+def admin_list_organizations_payload(
+    status_filter: Optional[str],
+    skip: int,
+    limit: int,
+    db: Session,
+    current_user: models.User,
+) -> List[schemas.Organization]:
+    """Admin-only listing of organizations with optional approval_status filter."""
+    if current_user.role != "system-admin":
+        raise HTTPException(status_code=403, detail="System admin access required")
+    if status_filter and status_filter != "all" and status_filter not in ALLOWED_APPROVAL_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"status must be one of: all, {', '.join(sorted(ALLOWED_APPROVAL_STATUSES))}",
+        )
+    orgs = get_organizations(db, skip=skip, limit=limit)
+    enriched = [enrich_organization_payload(org) for org in orgs]
+    if status_filter and status_filter != "all":
+        enriched = [item for item in enriched if item.get("approval_status") == status_filter]
+    return [schemas.Organization.model_validate(item) for item in enriched]
 
 
 def create_organization_payload(
