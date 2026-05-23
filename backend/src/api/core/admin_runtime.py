@@ -200,6 +200,20 @@ def reload_admin_runtime_from_db(db: Optional[Session] = None) -> None:
         for row in settings_rows:
             ADMIN_SYSTEM_SETTINGS[row.key] = row.value
 
+        # AI service overrides are stored as ai_* settings but also need to
+        # be reflected in os.environ so legacy os.getenv() call sites in
+        # provider modules pick them up after restart without an .env edit.
+        _AI_SETTING_TO_ENV = {
+            "ai_llm_provider": "LLM_PROVIDER",
+            "ai_stt_provider": "STT_PROVIDER",
+            "ai_gemini_model": "GEMINI_MODEL",
+            "ai_deepgram_model": "DEEPGRAM_MODEL",
+            "ai_groq_model": "ROUTER_MODEL",
+        }
+        for setting_key, env_key in _AI_SETTING_TO_ENV.items():
+            if setting_key in ADMIN_SYSTEM_SETTINGS:
+                os.environ[env_key] = str(ADMIN_SYSTEM_SETTINGS[setting_key])
+
         prompt_rows = db.query(models.AdminPrompt).all()
         ADMIN_PROMPTS.clear()
         for row in prompt_rows:
@@ -261,7 +275,18 @@ def persist_admin_setting(key: str, value: Any) -> None:
         db.close()
 
 
-def persist_admin_prompt(key: str, prompt: Dict[str, Any]) -> None:
+def persist_admin_prompt(
+    key: str,
+    prompt: Dict[str, Any],
+    actor: Optional[str] = None,
+    snapshot_previous: bool = True,
+) -> None:
+    """Persist a prompt update to ``admin_prompts``.
+
+    When ``snapshot_previous`` is True and a row already exists for ``key``,
+    the prior state is appended to ``admin_prompt_versions`` first so the
+    edit is reversible via the rollback endpoint.
+    """
     ensure_admin_runtime_tables()
     db = _open_session()
     try:
@@ -277,6 +302,17 @@ def persist_admin_prompt(key: str, prompt: Dict[str, Any]) -> None:
                 )
             )
         else:
+            if snapshot_previous:
+                db.add(
+                    models.AdminPromptVersion(
+                        prompt_key=row.key,
+                        name=row.name,
+                        description=row.description,
+                        content=row.content,
+                        version=row.version,
+                        created_by=actor,
+                    )
+                )
             row.name = prompt.get("name", row.name)
             row.description = prompt.get("description", row.description)
             row.content = prompt.get("content", row.content)

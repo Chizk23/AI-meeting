@@ -297,6 +297,7 @@ def get_admin_prompts_payload(current_user: models.User) -> List[Dict[str, Any]]
 def update_admin_prompt_payload(
     prompt_key: str,
     payload: Mapping[str, Any],
+    db: Session,
     current_user: models.User,
 ) -> Dict[str, Any]:
     require_system_admin_user(current_user)
@@ -309,10 +310,220 @@ def update_admin_prompt_payload(
         "version": next_version,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
-    persist_admin_prompt(prompt_key, prompt_record)
+    persist_admin_prompt(prompt_key, prompt_record, actor=current_user.username)
     ADMIN_PROMPTS[prompt_key] = prompt_record
     append_admin_audit_log(actor=current_user.username, action="UPDATE_PROMPT", target=prompt_key)
     return ADMIN_PROMPTS[prompt_key]
+
+
+def get_admin_prompt_versions_payload(
+    prompt_key: str,
+    db: Session,
+    current_user: models.User,
+) -> List[Dict[str, Any]]:
+    """Return historical snapshots of ``prompt_key``, most-recent-first."""
+    require_system_admin_user(current_user)
+    rows = (
+        db.query(models.AdminPromptVersion)
+        .filter(models.AdminPromptVersion.prompt_key == prompt_key)
+        .order_by(models.AdminPromptVersion.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "prompt_key": row.prompt_key,
+            "name": row.name,
+            "description": row.description,
+            "content": row.content,
+            "version": row.version,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "created_by": row.created_by,
+        }
+        for row in rows
+    ]
+
+
+def rollback_admin_prompt_payload(
+    prompt_key: str,
+    version_id: str,
+    db: Session,
+    current_user: models.User,
+) -> Dict[str, Any]:
+    """Restore ``prompt_key`` to the historical version identified by
+    ``version_id``. The current state is snapshotted first so the rollback
+    is itself reversible.
+    """
+    require_system_admin_user(current_user)
+    version_row = (
+        db.query(models.AdminPromptVersion)
+        .filter(
+            models.AdminPromptVersion.id == version_id,
+            models.AdminPromptVersion.prompt_key == prompt_key,
+        )
+        .first()
+    )
+    if version_row is None:
+        raise HTTPException(status_code=404, detail="Prompt version not found")
+
+    restored = {
+        "key": prompt_key,
+        "name": version_row.name,
+        "description": version_row.description,
+        "content": version_row.content,
+        "version": version_row.version,
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+    persist_admin_prompt(prompt_key, restored, actor=current_user.username)
+    ADMIN_PROMPTS[prompt_key] = restored
+    append_admin_audit_log(
+        actor=current_user.username,
+        action="ROLLBACK_PROMPT",
+        target=f"{prompt_key}:{version_id}",
+    )
+    return ADMIN_PROMPTS[prompt_key]
+
+
+def test_admin_prompt_payload(
+    prompt_key: str,
+    sample_text: str,
+    current_user: models.User,
+) -> Dict[str, Any]:
+    """Run the current prompt against ``sample_text`` using the configured
+    LLM router. Useful as a "playground" before saving a tweak.
+    """
+    require_system_admin_user(current_user)
+    prompt = ADMIN_PROMPTS.get(prompt_key)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    from src.providers.router_llm import RouterLLMAdapter
+
+    adapter = RouterLLMAdapter()
+    output = adapter.chat_completion(
+        system_prompt=prompt.get("content", ""),
+        user_prompt=sample_text,
+        temperature=0.3,
+        max_tokens=1024,
+    )
+    return {
+        "prompt_key": prompt_key,
+        "sample_text": sample_text,
+        "output": output,
+    }
+
+
+_VALID_LLM_PROVIDERS = {"google", "groq", "router"}
+_VALID_STT_PROVIDERS = {"deepgram", "phowhisper", "viwhisper"}
+_AI_SERVICE_ENV_KEYS = {
+    "llm_provider": "LLM_PROVIDER",
+    "stt_provider": "STT_PROVIDER",
+    "gemini_model": "GEMINI_MODEL",
+    "deepgram_model": "DEEPGRAM_MODEL",
+    "groq_model": "ROUTER_MODEL",
+}
+
+
+def update_admin_ai_services_payload(
+    payload: Mapping[str, Any],
+    current_user: models.User,
+) -> Dict[str, Any]:
+    """Persist AI service overrides and return the refreshed effective
+    configuration. Overrides live in ``admin_settings`` as ``ai_*`` keys;
+    env values stay as fallback defaults so a missing override behaves
+    identically to the historical behaviour.
+    """
+    require_system_admin_user(current_user)
+
+    if "llm_provider" in payload and payload["llm_provider"] not in _VALID_LLM_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"llm_provider must be one of {sorted(_VALID_LLM_PROVIDERS)}",
+        )
+    if "stt_provider" in payload and payload["stt_provider"] not in _VALID_STT_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"stt_provider must be one of {sorted(_VALID_STT_PROVIDERS)}",
+        )
+
+    changed: List[str] = []
+    for key, value in payload.items():
+        if value is None:
+            continue
+        if key not in _AI_SERVICE_ENV_KEYS:
+            continue
+        setting_key = f"ai_{key}"
+        ADMIN_SYSTEM_SETTINGS[setting_key] = value
+        persist_admin_setting(setting_key, value)
+        # Propagate to process env so legacy os.getenv call sites in
+        # provider modules pick up the change without a restart. They
+        # were the source of truth before; admin overrides become the
+        # new source of truth at runtime.
+        env_key = _AI_SERVICE_ENV_KEYS[key]
+        os.environ[env_key] = str(value)
+        changed.append(key)
+
+    if changed:
+        append_admin_audit_log(
+            actor=current_user.username,
+            action="UPDATE_AI_SERVICES",
+            target=",".join(sorted(changed)),
+        )
+
+    return get_admin_ai_services_payload(current_user)
+
+
+def view_as_org_begin_payload(
+    org_id: str,
+    db: Session,
+    current_user: models.User,
+) -> Dict[str, Any]:
+    """Record that a system-admin is entering "view-as" mode for ``org_id``.
+
+    The actual access uplift already exists (system-admins pass
+    ``require_org_admin`` for any org). This endpoint exists so the
+    transition is auditable: every begin/end is appended to ``audit_logs``
+    with the org's name as scope so it shows up in both the global admin
+    audit feed and the org-scoped audit feed (P2 #21).
+    """
+    require_system_admin_user(current_user)
+    org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    append_admin_audit_log(
+        actor=current_user.username,
+        action="VIEW_AS_ORG_BEGIN",
+        target=org.id,
+        org=org.name,
+    )
+    return {
+        "organization_id": org.id,
+        "organization_name": org.name,
+        "mode": "begin",
+    }
+
+
+def view_as_org_end_payload(
+    org_id: str,
+    db: Session,
+    current_user: models.User,
+) -> Dict[str, Any]:
+    """Record that a system-admin is exiting "view-as" mode for ``org_id``."""
+    require_system_admin_user(current_user)
+    org = db.query(models.Organization).filter(models.Organization.id == org_id).first()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    append_admin_audit_log(
+        actor=current_user.username,
+        action="VIEW_AS_ORG_END",
+        target=org.id,
+        org=org.name,
+    )
+    return {
+        "organization_id": org.id,
+        "organization_name": org.name,
+        "mode": "end",
+    }
 
 
 def get_admin_broadcasts_payload(current_user: models.User) -> List[Dict[str, Any]]:
