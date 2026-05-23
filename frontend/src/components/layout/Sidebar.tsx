@@ -132,14 +132,16 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onClose }) => {
                         Hệ thống (Root)
                       </Link>
                     )}
-                    <Link
-                      to="/org/admin"
-                      onClick={onClose}
-                      className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-primary-400"
-                    >
-                      <Settings size={18} />
-                      Admin Console
-                    </Link>
+                    {isOrgAdmin && (
+                      <Link
+                        to="/org/admin"
+                        onClick={onClose}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-primary-600 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-primary-400"
+                      >
+                        <Settings size={18} />
+                        Quản trị tổ chức
+                      </Link>
+                    )}
                   </nav>
                 </div>
               </>

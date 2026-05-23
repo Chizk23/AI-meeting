@@ -78,7 +78,6 @@ ADMIN_PROMPTS: Dict[str, Dict[str, Any]] = {
 }
 
 ADMIN_SYSTEM_SETTINGS: Dict[str, Any] = {
-    "require_2fa_admin": True,
     "public_registration_enabled": True,
     "storage_limit_gb_per_org": 50,
     "transcript_retention_policy": "forever",

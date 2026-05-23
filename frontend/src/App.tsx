@@ -111,11 +111,10 @@ const RoleGuard: React.FC<{ children: React.ReactNode; roles: string[] }> = ({
 
   const hasAccess =
     (roles.includes('system-admin') && isSystemAdmin) ||
-    (roles.includes('org-admin') && (isOrgAdmin || isSystemAdmin)) ||
-    (roles.includes('group-admin') && (isGroupAdmin || isOrgAdmin || isSystemAdmin)) ||
-    (roles.includes('viewer') &&
-      (isViewer || isGroupAdmin || isOrgAdmin || isSystemAdmin)) ||
-    (roles.includes('member') && (isMember || isGroupAdmin || isOrgAdmin || isSystemAdmin));
+    (roles.includes('org-admin') && isOrgAdmin) ||
+    (roles.includes('group-admin') && (isGroupAdmin || isOrgAdmin)) ||
+    (roles.includes('member') && (isMember || isGroupAdmin || isOrgAdmin)) ||
+    (roles.includes('viewer') && (isViewer || isMember || isGroupAdmin || isOrgAdmin));
 
   if (!hasAccess) {
     return (
@@ -158,7 +157,6 @@ const AppRoutes: React.FC = () => {
           )
         }
       />
-      <Route path="/home" element={<Navigate to="/" replace />} />
       <Route
         path="/login"
         element={
@@ -274,14 +272,6 @@ const AppRoutes: React.FC = () => {
           }
         />
         <Route
-          path="/create"
-          element={
-            <React.Suspense fallback={<PageLoader />}>
-              <CreateMeeting />
-            </React.Suspense>
-          }
-        />
-        <Route
           path="/upload"
           element={
             <React.Suspense fallback={<PageLoader />}>
@@ -308,7 +298,7 @@ const AppRoutes: React.FC = () => {
         <Route
           path="/groups/create"
           element={
-            <RoleGuard roles={['org-admin', 'system-admin', 'member']}>
+            <RoleGuard roles={['org-admin']}>
               <React.Suspense fallback={<PageLoader />}>
                 <CreateGroup />
               </React.Suspense>

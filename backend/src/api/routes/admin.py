@@ -53,7 +53,6 @@ class AdminBroadcastRequest(BaseModel):
 
 
 class AdminSettingsUpdateRequest(BaseModel):
-    require_2fa_admin: Optional[bool] = None
     public_registration_enabled: Optional[bool] = None
     storage_limit_gb_per_org: Optional[int] = None
     transcript_retention_policy: Optional[str] = None

@@ -372,8 +372,8 @@ class Meeting(MeetingBase, TimestampMixin):
     organization_id: str
     group_id: Optional[str] = None
     created_by: str
-    participants: List[MeetingParticipant] = Field(default_factory=list)
-    attended_participants: List[MeetingParticipant] = Field(default_factory=list)
+    participants: List["MeetingParticipant"] = Field(default_factory=list)
+    attended_participants: List["MeetingParticipant"] = Field(default_factory=list)
     attended_participants_count: int = 0
     group_name: Optional[str] = None
     organization_name: Optional[str] = None
