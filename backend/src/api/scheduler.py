@@ -125,10 +125,34 @@ async def status_transition_loop():
         await asyncio.sleep(30)
 
 
+async def retention_cleanup_loop():
+    """Run the transcript retention purge once per day."""
+    from src.api.core.retention import purge_transcripts_for_retention
+
+    # Stagger the first run by 60s to avoid contention with app boot.
+    await asyncio.sleep(60)
+    while True:
+        db = _get_db()
+        try:
+            deleted = purge_transcripts_for_retention(db)
+            if deleted:
+                logger.info(f"Retention cleanup purged {deleted} transcript(s)")
+        except Exception as e:
+            logger.error(f"Retention cleanup error: {e}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        finally:
+            db.close()
+        await asyncio.sleep(24 * 60 * 60)
+
+
 async def run_scheduler():
     """Run all scheduler tasks concurrently."""
     logger.info("Meeting scheduler started")
     await asyncio.gather(
         reminder_loop(),
         status_transition_loop(),
+        retention_cleanup_loop(),
     )

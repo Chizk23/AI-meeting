@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from src.api import auth, models, schemas
 from src.api.config import get_config
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS, append_admin_audit_log
 from src.api.core.invitation_support import resolve_pending_invitation_by_token
 from src.api.core.user_payloads import format_user_payload
 from src.api import crud
@@ -167,6 +167,12 @@ def login_payload(req: schemas.UserLogin, db: Session) -> Dict[str, Any]:
     ).filter((models.User.username == req.username) | (models.User.email == req.username)).first()
 
     if not user or not auth.verify_password(req.password, user.password_hash):
+        append_admin_audit_log(
+            actor=req.username or "",
+            action="LOGIN_FAILED",
+            target=req.username or "",
+            role="anonymous",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -174,11 +180,23 @@ def login_payload(req: schemas.UserLogin, db: Session) -> Dict[str, Any]:
         )
 
     if not user.is_active:
+        append_admin_audit_log(
+            actor=user.username,
+            action="LOGIN_BLOCKED_INACTIVE",
+            target=user.username,
+            role=user.role or "member",
+        )
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
     access_token = auth.create_access_token(
         data={"sub": user.username},
         expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    append_admin_audit_log(
+        actor=user.username,
+        action="LOGIN_SUCCESS",
+        target=user.username,
+        role=user.role or "member",
     )
     return {
         "access_token": access_token,
@@ -228,6 +246,12 @@ def reset_password_payload(req: schemas.ResetPasswordRequest, db: Session) -> Di
 
     update_user(db, user.id, {"password": req.newPassword})
     mark_password_reset_otp_used(db, db_otp.id, now)
+    append_admin_audit_log(
+        actor=user.username,
+        action="RESET_PASSWORD",
+        target=req.email,
+        role=user.role or "member",
+    )
     return {"message": "Password reset successfully"}
 
 
@@ -250,8 +274,20 @@ def change_password_payload(
     current_user: models.User,
 ) -> Dict[str, str]:
     if not auth.verify_password(req.current_password, current_user.password_hash):
+        append_admin_audit_log(
+            actor=current_user.username,
+            action="CHANGE_PASSWORD_FAILED",
+            target=current_user.username,
+            role=current_user.role or "member",
+        )
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     update_user(db, current_user.id, {"password": req.new_password})
+    append_admin_audit_log(
+        actor=current_user.username,
+        action="CHANGE_PASSWORD",
+        target=current_user.username,
+        role=current_user.role or "member",
+    )
     return {"message": "Password changed successfully"}
 
 

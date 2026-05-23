@@ -11,10 +11,13 @@ from src.api.core.admin_runtime import (
     ADMIN_BROADCAST_HISTORY,
     ADMIN_PROMPTS,
     ADMIN_SYSTEM_SETTINGS,
-    _save_admin_prompts,
-    _save_admin_settings,
     append_admin_audit_log,
+    delete_admin_broadcast,
+    ensure_admin_runtime_tables,
     ensure_audit_log_table,
+    persist_admin_broadcast,
+    persist_admin_prompt,
+    persist_admin_setting,
 )
 from src.api.core.notifications_support import create_persisted_notification
 from src.api.core.upload_jobs import feature_flags_for_user
@@ -85,17 +88,101 @@ def update_admin_user_role_payload(
     return format_user_payload(user)
 
 
+def _reassign_resources_to_org_admin(db: Session, deleted_user: models.User) -> List[Dict[str, Any]]:
+    """For each organization the soft-deleted user belongs to, transfer the
+    active resources they own (meetings, action items created by them) to one
+    of the org's org-admins. Returns a list of {org_id, new_owner_id, counts}
+    for audit logging. We never reassign across organizations and we skip if
+    no org-admin exists in that org.
+    """
+    reassignments: List[Dict[str, Any]] = []
+    user_orgs = db.query(models.UserOrganization).filter(
+        models.UserOrganization.user_id == deleted_user.id,
+    ).all()
+    for membership in user_orgs:
+        org_admin = (
+            db.query(models.UserOrganization)
+            .filter(
+                models.UserOrganization.organization_id == membership.organization_id,
+                models.UserOrganization.role == "org-admin",
+                models.UserOrganization.user_id != deleted_user.id,
+            )
+            .first()
+        )
+        if not org_admin:
+            continue
+        new_owner_id = org_admin.user_id
+        meetings_q = db.query(models.Meeting).filter(
+            models.Meeting.organization_id == membership.organization_id,
+            models.Meeting.created_by == deleted_user.id,
+        )
+        meeting_count = meetings_q.count()
+        meetings_q.update({models.Meeting.created_by: new_owner_id}, synchronize_session=False)
+
+        # Scope action items to THIS organization by joining through Meeting.
+        # ActionItem has no direct organization_id, but the spec says
+        # "we never reassign across organizations" — so we filter via the
+        # meeting's org. ActionItems whose meeting belongs to a different org
+        # are left alone (they will be handled when we visit that org).
+        action_item_ids = [
+            row[0]
+            for row in db.query(models.ActionItem.id)
+            .join(models.Meeting, models.ActionItem.meeting_id == models.Meeting.id)
+            .filter(
+                models.Meeting.organization_id == membership.organization_id,
+                models.ActionItem.created_by == deleted_user.id,
+            )
+            .all()
+        ]
+        action_item_count = len(action_item_ids)
+        if action_item_ids:
+            db.query(models.ActionItem).filter(
+                models.ActionItem.id.in_(action_item_ids)
+            ).update(
+                {models.ActionItem.created_by: new_owner_id},
+                synchronize_session=False,
+            )
+
+        reassignments.append({
+            "organization_id": membership.organization_id,
+            "new_owner_id": new_owner_id,
+            "meetings": meeting_count,
+            "action_items": action_item_count,
+        })
+    db.commit()
+    return reassignments
+
+
 def delete_admin_user_payload(user_id: str, db: Session, current_user: models.User) -> Dict[str, Any]:
     require_system_admin_user(current_user)
-    user = update_user(db, user_id, {"is_active": False})
+    user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+
+    user = update_user(db, user_id, {"is_active": False})
+    reassignments = _reassign_resources_to_org_admin(db, user)
+
     append_admin_audit_log(
         actor=current_user.username,
         action="DELETE_USER",
         target=user.email,
     )
-    return {"detail": "User deactivated", "user_id": user_id}
+    for entry in reassignments:
+        append_admin_audit_log(
+            actor=current_user.username,
+            action="REASSIGN_OWNERSHIP",
+            target=(
+                f"org={entry['organization_id']} new_owner={entry['new_owner_id']} "
+                f"meetings={entry['meetings']} action_items={entry['action_items']}"
+            ),
+        )
+    return {
+        "detail": "User deactivated",
+        "user_id": user_id,
+        "reassignments": reassignments,
+    }
 
 
 def get_admin_ai_services_payload(current_user: models.User) -> Dict[str, Any]:
@@ -214,7 +301,7 @@ def update_admin_prompt_payload(
 ) -> Dict[str, Any]:
     require_system_admin_user(current_user)
     next_version = payload.get("version") or ADMIN_PROMPTS.get(prompt_key, {}).get("version", "1.0.0")
-    ADMIN_PROMPTS[prompt_key] = {
+    prompt_record = {
         "key": prompt_key,
         "name": payload["name"],
         "description": payload.get("description"),
@@ -222,7 +309,8 @@ def update_admin_prompt_payload(
         "version": next_version,
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
-    _save_admin_prompts()
+    persist_admin_prompt(prompt_key, prompt_record)
+    ADMIN_PROMPTS[prompt_key] = prompt_record
     append_admin_audit_log(actor=current_user.username, action="UPDATE_PROMPT", target=prompt_key)
     return ADMIN_PROMPTS[prompt_key]
 
@@ -273,6 +361,7 @@ def create_admin_broadcast_payload(
         )
     item["reach"] = len(recipients)
     db.commit()
+    persist_admin_broadcast(item, actor=current_user.username)
     ADMIN_BROADCAST_HISTORY.insert(0, item)
     append_admin_audit_log(actor=current_user.username, action="SEND_BROADCAST", target=item["target"])
     return item
@@ -280,9 +369,11 @@ def create_admin_broadcast_payload(
 
 def delete_admin_broadcast_payload(notification_id: str, current_user: models.User) -> Dict[str, str]:
     require_system_admin_user(current_user)
+    removed_from_db = delete_admin_broadcast(notification_id)
     before = len(ADMIN_BROADCAST_HISTORY)
     ADMIN_BROADCAST_HISTORY[:] = [item for item in ADMIN_BROADCAST_HISTORY if item.get("id") != notification_id]
-    if len(ADMIN_BROADCAST_HISTORY) == before:
+    removed_from_cache = len(ADMIN_BROADCAST_HISTORY) < before
+    if not removed_from_db and not removed_from_cache:
         raise HTTPException(status_code=404, detail="Notification not found")
     append_admin_audit_log(actor=current_user.username, action="DELETE_BROADCAST", target=notification_id)
     return {"message": "Notification deleted"}
@@ -326,8 +417,10 @@ def get_admin_settings_payload(current_user: models.User) -> Dict[str, Any]:
 def update_admin_settings_payload(payload: Mapping[str, Any], current_user: models.User) -> Dict[str, Any]:
     require_system_admin_user(current_user)
     for key, value in payload.items():
+        if value is None:
+            continue
         ADMIN_SYSTEM_SETTINGS[key] = value
-    _save_admin_settings()
+        persist_admin_setting(key, value)
     append_admin_audit_log(actor=current_user.username, action="UPDATE_SYSTEM_SETTINGS", target="admin.settings")
     return ADMIN_SYSTEM_SETTINGS
 

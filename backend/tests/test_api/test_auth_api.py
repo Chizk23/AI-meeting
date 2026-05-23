@@ -28,7 +28,9 @@ def override_get_db():
 
 
 @pytest.fixture(scope="function")
-def client():
+def client(monkeypatch):
+    from src.api.core import admin_runtime as runtime
+    monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
@@ -266,3 +268,40 @@ def test_member_created_organization_requires_approval_then_promotes_creator(cli
     assert refreshed_member.status_code == 200
     refreshed_memberships = refreshed_member.json()["orgMemberships"]
     assert refreshed_memberships[0]["role"] == "org-admin"
+
+
+def test_register_blocked_when_public_registration_disabled(client):
+    from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+    saved = ADMIN_SYSTEM_SETTINGS.get("public_registration_enabled", True)
+    ADMIN_SYSTEM_SETTINGS["public_registration_enabled"] = False
+    try:
+        response = client.post(
+            "/api/auth/register",
+            json=register_payload(username="blocked_user", email="blocked@example.com"),
+        )
+        assert response.status_code == 403
+        assert "Public registration is disabled" in response.json()["detail"]
+    finally:
+        ADMIN_SYSTEM_SETTINGS["public_registration_enabled"] = saved
+
+
+def test_register_with_invite_token_allowed_even_when_public_registration_disabled(client):
+    """Invited users must still be able to register when public registration is off."""
+    from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+    saved = ADMIN_SYSTEM_SETTINGS.get("public_registration_enabled", True)
+    ADMIN_SYSTEM_SETTINGS["public_registration_enabled"] = False
+    try:
+        response = client.post(
+            "/api/auth/register",
+            json=register_payload(
+                username="invited_user",
+                email="invited@example.com",
+                inviteToken="not-a-real-token",
+            ),
+        )
+        # Invite token path is exercised: we get past the public-registration
+        # guard and fail on the invite token validation instead (400).
+        assert response.status_code == 400
+        assert response.json()["detail"] != "Public registration is disabled"
+    finally:
+        ADMIN_SYSTEM_SETTINGS["public_registration_enabled"] = saved

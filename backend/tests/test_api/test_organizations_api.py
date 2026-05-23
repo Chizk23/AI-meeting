@@ -31,7 +31,9 @@ def override_get_db():
 
 
 @pytest.fixture(scope="function")
-def client():
+def client(monkeypatch):
+    from src.api.core import admin_runtime as runtime
+    monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
@@ -373,3 +375,77 @@ def test_preview_pending_and_accept_invitation_flows(client: TestClient, db_sess
         headers=auth_headers(client, stranger.username),
     )
     assert mismatch_response.status_code == 400
+
+
+def test_admin_organizations_filter_by_status(client: TestClient, db_session: Session):
+    """GET /api/admin/organizations?status=pending must return only orgs with
+    approval_status=pending. Same for active, rejected, suspended, all."""
+    sysadmin = make_user(db_session, "filter_sysadmin", "filter_sysadmin@example.com", role="system-admin")
+
+    pending_org = create_organization(db_session, {"name": "Pending Co", "settings": {"approval_status": "pending"}})
+    active_org = create_organization(db_session, {"name": "Active Co", "settings": {"approval_status": "active"}})
+    rejected_org = create_organization(db_session, {"name": "Rejected Co", "settings": {"approval_status": "rejected"}})
+
+    headers = auth_headers(client, sysadmin.username)
+
+    pending_res = client.get("/api/admin/organizations?status=pending", headers=headers)
+    assert pending_res.status_code == 200, pending_res.text
+    pending_payload = pending_res.json()
+    assert all(item["approval_status"] == "pending" for item in pending_payload)
+    assert any(item["id"] == pending_org.id for item in pending_payload)
+
+    active_res = client.get("/api/admin/organizations?status=active", headers=headers)
+    assert active_res.status_code == 200
+    active_payload = active_res.json()
+    assert all(item["approval_status"] == "active" for item in active_payload)
+    assert any(item["id"] == active_org.id for item in active_payload)
+    assert not any(item["id"] == pending_org.id for item in active_payload)
+
+    rejected_res = client.get("/api/admin/organizations?status=rejected", headers=headers)
+    assert rejected_res.status_code == 200
+    assert any(item["id"] == rejected_org.id for item in rejected_res.json())
+
+    all_res = client.get("/api/admin/organizations", headers=headers)
+    assert all_res.status_code == 200
+    all_ids = {item["id"] for item in all_res.json()}
+    assert pending_org.id in all_ids
+    assert active_org.id in all_ids
+    assert rejected_org.id in all_ids
+
+
+def test_admin_organizations_requires_system_admin(client: TestClient, db_session: Session):
+    member = make_user(db_session, "regular_member", "regular_member@example.com")
+    res = client.get("/api/admin/organizations", headers=auth_headers(client, member.username))
+    assert res.status_code == 403
+
+
+def test_admin_organizations_filter_paginates_after_filter(client: TestClient, db_session: Session):
+    """Regression test for review bot finding: pagination must happen AFTER the
+    Python-level approval_status filter, not before. Create 25 active orgs +
+    a single pending org positioned at the END of the natural list, then ask
+    for ?status=pending&limit=10 — the pending org must still be returned.
+    """
+    sysadmin = make_user(db_session, "page_sysadmin", "page_sysadmin@example.com", role="system-admin")
+
+    # Create 25 active orgs first so they fill the "first page" of the natural
+    # ordering returned by get_organizations.
+    for i in range(25):
+        create_organization(
+            db_session,
+            {"name": f"Active {i:02d}", "settings": {"approval_status": "active"}},
+        )
+    # Then 1 pending org that lands AFTER all the actives.
+    pending = create_organization(
+        db_session,
+        {"name": "Late Pending", "settings": {"approval_status": "pending"}},
+    )
+
+    headers = auth_headers(client, sysadmin.username)
+    res = client.get("/api/admin/organizations?status=pending&limit=10", headers=headers)
+    assert res.status_code == 200, res.text
+    payload = res.json()
+    # Before the fix this would return [] because skip/limit was applied
+    # before the python filter. After the fix the pending org is in the result.
+    assert any(item["id"] == pending.id for item in payload), (
+        "pending org positioned after pagination window must still be returned"
+    )
