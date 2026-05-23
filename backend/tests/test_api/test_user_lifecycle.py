@@ -125,6 +125,68 @@ def test_admin_soft_delete_user_marks_inactive_and_reassigns_meeting_ownership(
     )
 
 
+def test_soft_delete_reassigns_action_items_only_within_their_org(
+    client: TestClient, db_session: Session
+):
+    """Regression for the cross-org action-item bug found in PR #3 review:
+    when the deleted user belongs to two orgs, action items must follow the
+    org boundary of their parent meeting — they cannot all be vacuumed into
+    the first org's admin.
+    """
+    sysadmin = make_user(db_session, "sys_admin_xorg", "sys_xorg@example.com", role="system-admin")
+    admin_a = make_user(db_session, "admin_a_xorg", "admin_a_xorg@example.com")
+    admin_b = make_user(db_session, "admin_b_xorg", "admin_b_xorg@example.com")
+    member = make_user(db_session, "multi_member", "multi_member@example.com")
+
+    org_a = create_organization(db_session, {"name": "Org A xorg", "settings": {"approval_status": "active"}})
+    org_b = create_organization(db_session, {"name": "Org B xorg", "settings": {"approval_status": "active"}})
+    add_user_to_organization(db_session, admin_a.id, org_a.id, "org-admin")
+    add_user_to_organization(db_session, admin_b.id, org_b.id, "org-admin")
+    add_user_to_organization(db_session, member.id, org_a.id, "member")
+    add_user_to_organization(db_session, member.id, org_b.id, "member")
+
+    meeting_a = create_meeting(
+        db_session,
+        {"title": "Meeting in A", "organization_id": org_a.id, "status": "live"},
+        created_by=member.id,
+    )
+    meeting_b = create_meeting(
+        db_session,
+        {"title": "Meeting in B", "organization_id": org_b.id, "status": "live"},
+        created_by=member.id,
+    )
+    action_a = models.ActionItem(
+        meeting_id=meeting_a.id,
+        title="todo in A",
+        description="x",
+        created_by=member.id,
+    )
+    action_b = models.ActionItem(
+        meeting_id=meeting_b.id,
+        title="todo in B",
+        description="y",
+        created_by=member.id,
+    )
+    db_session.add_all([action_a, action_b])
+    db_session.commit()
+    db_session.refresh(action_a)
+    db_session.refresh(action_b)
+
+    sysadmin_token = login(client, sysadmin.username)
+    res = client.delete(
+        f"/api/admin/users/{member.id}",
+        headers={"Authorization": f"Bearer {sysadmin_token}"},
+    )
+    assert res.status_code == 200, res.text
+
+    db_session.expire_all()
+    refreshed_a = db_session.query(models.ActionItem).filter_by(id=action_a.id).one()
+    refreshed_b = db_session.query(models.ActionItem).filter_by(id=action_b.id).one()
+
+    assert refreshed_a.created_by == admin_a.id, "action item in org A must go to org A's admin"
+    assert refreshed_b.created_by == admin_b.id, "action item in org B must go to org B's admin"
+
+
 def test_admin_suspend_user_invalidates_existing_token(client: TestClient, db_session: Session):
     sysadmin = make_user(db_session, "sysadmin_susp", "sysadmin_susp@example.com", role="system-admin")
     target = make_user(db_session, "target_user", "target_user@example.com")

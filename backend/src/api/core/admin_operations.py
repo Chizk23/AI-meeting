@@ -119,11 +119,29 @@ def _reassign_resources_to_org_admin(db: Session, deleted_user: models.User) -> 
         meeting_count = meetings_q.count()
         meetings_q.update({models.Meeting.created_by: new_owner_id}, synchronize_session=False)
 
-        action_items_q = db.query(models.ActionItem).filter(
-            models.ActionItem.created_by == deleted_user.id,
-        )
-        action_item_count = action_items_q.count()
-        action_items_q.update({models.ActionItem.created_by: new_owner_id}, synchronize_session=False)
+        # Scope action items to THIS organization by joining through Meeting.
+        # ActionItem has no direct organization_id, but the spec says
+        # "we never reassign across organizations" — so we filter via the
+        # meeting's org. ActionItems whose meeting belongs to a different org
+        # are left alone (they will be handled when we visit that org).
+        action_item_ids = [
+            row[0]
+            for row in db.query(models.ActionItem.id)
+            .join(models.Meeting, models.ActionItem.meeting_id == models.Meeting.id)
+            .filter(
+                models.Meeting.organization_id == membership.organization_id,
+                models.ActionItem.created_by == deleted_user.id,
+            )
+            .all()
+        ]
+        action_item_count = len(action_item_ids)
+        if action_item_ids:
+            db.query(models.ActionItem).filter(
+                models.ActionItem.id.in_(action_item_ids)
+            ).update(
+                {models.ActionItem.created_by: new_owner_id},
+                synchronize_session=False,
+            )
 
         reassignments.append({
             "organization_id": membership.organization_id,
