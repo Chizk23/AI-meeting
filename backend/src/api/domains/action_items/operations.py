@@ -26,7 +26,7 @@ from src.api.crud import (
 )
 
 
-def meeting_participant_meeting_ids_for_user(db: Session, user: models.User):
+def meeting_participant_meeting_ids_for_user(db: Session, user: models.User) -> List[str]:
     email = (user.email or "").lower()
     participant_filter = models.MeetingParticipant.user_id == user.id
     if email:
@@ -34,13 +34,14 @@ def meeting_participant_meeting_ids_for_user(db: Session, user: models.User):
             participant_filter,
             func.lower(models.MeetingParticipant.email) == email,
         )
-    return db.query(models.MeetingParticipant.meeting_id).filter(
+    rows = db.query(models.MeetingParticipant.meeting_id).filter(
         participant_filter,
         or_(
             models.MeetingParticipant.attended.is_(True),
             models.MeetingParticipant.invite_status.in_(["accepted", "attended"]),
         ),
     ).distinct().all()
+    return [meeting_id for (meeting_id,) in rows]
 
 
 def list_action_items_payload(

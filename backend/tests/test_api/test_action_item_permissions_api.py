@@ -374,6 +374,42 @@ def test_personal_action_item_list_only_shows_owned_items(client, db_session):
     assert hidden_from_other.json() == []
 
 
+def test_action_item_list_includes_unassigned_meeting_tasks_for_participants(client, db_session):
+    org = create_active_org(db_session, "Org List")
+    creator = create_member(db_session, "listcreator", "listcreator@example.com")
+    participant = create_member(db_session, "listparticipant", "listparticipant@example.com")
+    outsider = create_member(db_session, "listoutsider", "listoutsider@example.com")
+    add_user_to_organization(db_session, creator.id, org.id, "member")
+    add_user_to_organization(db_session, participant.id, org.id, "member")
+    add_user_to_organization(db_session, outsider.id, org.id, "member")
+    meeting = create_meeting(
+        db_session,
+        {
+            "organization_id": org.id,
+            "title": "Participant Task Meeting",
+            "status": "upcoming",
+        },
+        created_by=creator.id,
+    )
+    add_meeting_participants(db_session, meeting.id, participant)
+    create_action_item(
+        db_session,
+        {
+            "meeting_id": meeting.id,
+            "title": "Unassigned participant task",
+        },
+        created_by=creator.id,
+    )
+
+    participant_response = client.get("/api/action-items", headers=auth_headers(participant.username))
+    assert participant_response.status_code == 200
+    assert [item["title"] for item in participant_response.json()] == ["Unassigned participant task"]
+
+    outsider_response = client.get("/api/action-items", headers=auth_headers(outsider.username))
+    assert outsider_response.status_code == 200
+    assert outsider_response.json() == []
+
+
 def test_action_item_list_with_unknown_meeting_returns_404(client, db_session):
     member = create_member(db_session, "member404", "member404@example.com")
 
