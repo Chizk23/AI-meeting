@@ -13,7 +13,7 @@ from src.api.config import get_config
 from src.api.core.app_state import AVATAR_UPLOAD_DIR
 from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS, append_admin_audit_log
 from src.api.domains.organizations.invitations import resolve_pending_invitation_by_token
-from src.api.core.user_payloads import format_user_payload
+from src.api.domains.shared.user_payloads import format_user_payload
 from src.api import crud
 from src.api.crud import (
     create_password_reset_otp,

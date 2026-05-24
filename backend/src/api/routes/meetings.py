@@ -28,7 +28,7 @@ from src.api.domains.meetings.operations import (
     require_meeting_manager,
     speaker_mapping_payload,
 )
-from src.api.core.user_payloads import get_meeting_by_id, require_meeting_room_access, user_org_ids, meeting_participant_meeting_ids_for_user, meeting_group_ids_for_user
+from src.api.domains.shared.user_payloads import get_meeting_by_id, require_meeting_room_access, user_org_ids, meeting_participant_meeting_ids_for_user, meeting_group_ids_for_user
 from src.api.crud import (
     add_meeting_participant,
     check_meeting_overlap,
@@ -37,7 +37,7 @@ from src.api.crud import (
     update_meeting,
 )
 from src.api.domains.admin.runtime import append_admin_audit_log
-from src.api.core.notifications_support import get_org_admin_recipient_ids, push_runtime_notification
+from src.api.domains.notifications.support import get_org_admin_recipient_ids, push_runtime_notification
 from src.api.database import get_db, SessionLocal
 from src.api.domains.meetings.transcripts import finalize_meeting_transcript, generate_meeting_ai_notes_all_languages
 

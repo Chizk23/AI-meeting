@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from src.api import auth, schemas
-from src.api.core.search_operations import search_entities_payload
+from src.api.domains.search.operations import search_entities_payload
 from src.api.database import get_db
 
 router = APIRouter(tags=["search"])

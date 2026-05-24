@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.api import models
-from src.api.core.user_payloads import user_org_ids
+from src.api.domains.shared.user_payloads import user_org_ids
 from src.api.domains.admin.operations import ADMIN_SYSTEM_SETTINGS
 
 

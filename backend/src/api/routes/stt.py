@@ -38,7 +38,7 @@ from src.api.domains.meetings.prompts import (
 )
 from src.api.domains.meetings.transcripts import build_transcript_from_drafts, serialize_transcript_draft_chunks
 from src.api.domains.meetings.tasks import _extract_json_object, _normalize_analysis_payload
-from src.api.core.user_payloads import get_meeting_by_id, require_meeting_room_access
+from src.api.domains.shared.user_payloads import get_meeting_by_id, require_meeting_room_access
 from src.api.crud import add_meeting_participant, create_audio_file, create_meeting, update_meeting
 from src.api.database import SessionLocal, get_db
 from src.cost.cost_logger import CostLogger

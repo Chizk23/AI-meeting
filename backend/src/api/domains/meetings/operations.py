@@ -27,7 +27,7 @@ from src.api.domains.meetings.transcripts import (
     build_transcript_from_drafts,
     serialize_transcript_draft_chunks,
 )
-from src.api.core.user_payloads import format_user_payload
+from src.api.domains.shared.user_payloads import format_user_payload
 
 logger = logging.getLogger(__name__)
 

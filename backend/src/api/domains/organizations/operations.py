@@ -15,8 +15,8 @@ from src.api.domains.organizations.invitations import (
     invitation_preview_payload,
     resolve_pending_invitation_by_token,
 )
-from src.api.core.notifications_support import create_persisted_notification
-from src.api.core.user_payloads import format_user_payload
+from src.api.domains.notifications.support import create_persisted_notification
+from src.api.domains.shared.user_payloads import format_user_payload
 from src.api.crud import (
     add_user_to_group,
     add_user_to_organization,
