@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from src.api import auth
-from src.api.core.analytics_operations import (
+from src.api.domains.admin.analytics import (
     get_meeting_analytics_payload,
     get_performance_analytics_payload,
     get_stats_payload,

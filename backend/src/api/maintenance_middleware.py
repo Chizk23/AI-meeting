@@ -23,7 +23,7 @@ from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api import auth
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
 from src.api.core import admin_runtime
 
 

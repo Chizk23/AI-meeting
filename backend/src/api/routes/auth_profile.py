@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from src.api import auth, schemas
-from src.api.core.auth_profile_operations import (
+from src.api.domains.organizations.auth_profile import (
     change_password_payload,
     forgot_password_payload,
     get_profile_payload,

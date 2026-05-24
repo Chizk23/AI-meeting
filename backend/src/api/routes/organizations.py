@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from src.api import auth, schemas
-from src.api.core.organization_operations import (
+from src.api.domains.organizations.operations import (
     accept_invitation_by_id_payload,
     accept_invitation_by_token_payload,
     admin_list_organizations_payload,

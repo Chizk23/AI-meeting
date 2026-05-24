@@ -17,7 +17,7 @@ from src.api import models
 from src.api.crud import create_user
 from src.api.database import Base, get_db
 from src.api.main import app
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
 
 
 TEST_DATABASE_URL = "sqlite:///:memory:"

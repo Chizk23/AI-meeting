@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from src.api import models
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
 
 logger = logging.getLogger(__name__)
 

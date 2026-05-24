@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from src.api import auth, schemas
-from src.api.core.group_operations import (
+from src.api.domains.organizations.groups import (
     GroupInviteByEmailRequest,
     add_group_member_by_email_payload,
     add_group_member_payload,

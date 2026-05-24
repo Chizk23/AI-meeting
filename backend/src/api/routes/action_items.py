@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from src.api import auth, schemas
-from src.api.core.action_item_operations import (
+from src.api.domains.action_items.operations import (
     create_action_item_payload,
     delete_action_item_payload,
     list_action_items_payload,

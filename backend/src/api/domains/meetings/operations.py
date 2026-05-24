@@ -328,7 +328,7 @@ def format_summary_payload(summary: Optional[models.MeetingSummary]) -> Optional
 
 
 def serialize_action_item_payload(action_item: models.ActionItem) -> Dict[str, Any]:
-    from src.api.core.action_item_support import serialize_action_item_payload as core_serialize
+    from src.api.domains.action_items.support import serialize_action_item_payload as core_serialize
 
     return core_serialize(action_item)
 
@@ -886,8 +886,8 @@ def build_meeting_detail_payload(
     user_lang: str = "vi",
     access_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
-    from src.api.core.organization_operations import enrich_organization_payload
-    from src.api.core.group_operations import enrich_group_payload
+    from src.api.domains.organizations.operations import enrich_organization_payload
+    from src.api.domains.organizations.groups import enrich_group_payload
 
     audio_status = ensure_meeting_audio_published(db, meeting)
     latest_transcript = _latest_processed_record(meeting.transcripts or [])

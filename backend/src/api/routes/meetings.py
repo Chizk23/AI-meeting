@@ -36,7 +36,7 @@ from src.api.crud import (
     remove_meeting_participant,
     update_meeting,
 )
-from src.api.core.admin_runtime import append_admin_audit_log
+from src.api.domains.admin.runtime import append_admin_audit_log
 from src.api.core.notifications_support import get_org_admin_recipient_ids, push_runtime_notification
 from src.api.database import get_db, SessionLocal
 from src.api.domains.meetings.transcripts import finalize_meeting_transcript, generate_meeting_ai_notes_all_languages

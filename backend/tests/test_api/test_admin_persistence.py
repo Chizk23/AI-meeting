@@ -12,7 +12,7 @@ from src.api import models
 from src.api.crud import create_user
 from src.api.database import Base, get_db
 from src.api.main import app
-from src.api.core.admin_runtime import (
+from src.api.domains.admin.runtime import (
     ADMIN_BROADCAST_HISTORY,
     ADMIN_PROMPTS,
     ADMIN_SYSTEM_SETTINGS,
