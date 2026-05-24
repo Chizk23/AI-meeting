@@ -48,7 +48,7 @@ def client(monkeypatch):
     # duration of the test so admin operations do not bleed into the
     # developer's local sqlite file and so reload_admin_runtime_from_db
     # uses the freshly-seeded test database on startup.
-    from src.api.core import admin_runtime as runtime
+    from src.api.domains.admin import runtime
     monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db

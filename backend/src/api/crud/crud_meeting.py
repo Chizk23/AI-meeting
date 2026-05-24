@@ -8,7 +8,7 @@ import random
 import string
 import uuid
 from .. import models
-from ..core.app_state import AUDIO_UPLOAD_DIR, LEGACY_AUDIO_UPLOAD_DIR, resolve_audio_storage_path
+from ..runtime.app_state import AUDIO_UPLOAD_DIR, LEGACY_AUDIO_UPLOAD_DIR, resolve_audio_storage_path
 
 logger = logging.getLogger(__name__)
 

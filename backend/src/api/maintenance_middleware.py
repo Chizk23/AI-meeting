@@ -24,7 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api import auth
 from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
-from src.api.core import admin_runtime
+from src.api.domains.admin import runtime as admin_runtime
 
 
 _DEFAULT_ALLOW_PATHS: Set[str] = {

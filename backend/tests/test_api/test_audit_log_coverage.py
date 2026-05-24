@@ -43,7 +43,7 @@ def override_get_db():
 def client(monkeypatch):
     # admin_runtime persistence uses its own session factory; point it at the
     # in-memory test engine for the duration of the test.
-    from src.api.core import admin_runtime as runtime
+    from src.api.domains.admin import runtime
     monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db

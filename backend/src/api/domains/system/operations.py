@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict
 
-from src.api.core.app_state import config
+from src.api.runtime.app_state import config
 from src.api.database import health_check as db_health_check
 
 

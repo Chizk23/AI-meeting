@@ -39,7 +39,7 @@ def override_get_db():
 
 @pytest.fixture(scope="function")
 def client(monkeypatch):
-    from src.api.core import admin_runtime as runtime
+    from src.api.domains.admin import runtime
     monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db

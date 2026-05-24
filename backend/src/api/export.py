@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import auth, models
-from .core.admin_runtime import append_admin_audit_log
+from src.api.domains.admin.runtime import append_admin_audit_log
 from .database import get_db
 
 router = APIRouter(prefix="/api/export", tags=["export"])
