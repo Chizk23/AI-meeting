@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronDown, FolderOpen } from 'lucide-react';
-import type { Group } from '../../types';
+import type { Group } from '../../../types';
 
 interface GroupSelectorProps {
   groups: Group[];

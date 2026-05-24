@@ -604,7 +604,7 @@ export function useAudioRecorder(
   }, [flushRecording]);
 
   const finalize = useCallback(
-    async (finalizeMeetingId: string, language?: string) => {
+    async (finalizeMeetingId: string) => {
       try {
         await stopRecording();
 
@@ -625,7 +625,6 @@ export function useAudioRecorder(
           {
             transcript: fullTranscriptRef.current,
             segments: allSegmentsRef.current,
-            language: language || "vi",
           },
           { timeout: 120000 }
         );

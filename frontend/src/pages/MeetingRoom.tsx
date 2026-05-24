@@ -447,7 +447,7 @@ const MeetingRoomInner: React.FC = () => {
     } else if (wsEvent.type === "ai.notes.started") {
       setAiNotesStatus("PROCESSING");
       setRemoteMeeting((current) => current ? { ...current, summaryStatus: "PROCESSING" } : current);
-      showToast.info("AI Notes đang được tạo...");
+      showToast.info("AI Notes đang được tạo cho 5 ngôn ngữ...");
     } else if ((wsEvent.type === "ai.notes.completed" || wsEvent.type === "ai.notes") && wsEvent.summary_status === "COMPLETED") {
       setAiNotes(wsEvent.summary || null);
       setAiNotesStatus("COMPLETED");
@@ -699,7 +699,7 @@ const MeetingRoomInner: React.FC = () => {
       return;
     }
     if (result?.summary_status === "COMPLETED") {
-      showToast.success("Đã lưu transcript và tạo AI Notes thành công.");
+      showToast.success("Đã lưu transcript và tạo AI Notes cho 5 ngôn ngữ thành công.");
       return;
     }
     if (result?.summary_status === "FAILED") {
@@ -724,13 +724,13 @@ const MeetingRoomInner: React.FC = () => {
     // Organizer: kết thúc cuộc họp + finalize
     if (meetingId) {
       setIsFinalizing(true);
-      showToast.info("Đang lưu bản nháp transcript và tạo AI Notes...");
+      showToast.info("Đang lưu transcript và tạo AI Notes cho 5 ngôn ngữ...");
       try {
         await api.post(`/api/meetings/${meetingId}/start`).catch(() => {});
         await api.post(`/api/meetings/${meetingId}/end`, { status: "processing" });
         if (isRecording) {
           try {
-            const result = await finalize(meetingId, "vi");
+            const result = await finalize(meetingId);
             applyFinalizeResult(result);
           } catch (err: any) {
             if (err?.response?.status === 400) {
@@ -822,7 +822,7 @@ const MeetingRoomInner: React.FC = () => {
       : aiNotesStatus === "FAILED"
         ? "Đã lưu bản nháp, chưa tạo được bản tổng hợp"
         : aiNotesStatus === "PROCESSING"
-          ? "Đang tạo bản tổng hợp"
+          ? "Đang tạo bản tổng hợp 5 ngôn ngữ"
           : "Chưa có bản tổng hợp";
   if (isMeetingLoading) {
     return (
@@ -1404,7 +1404,7 @@ const MeetingRoomInner: React.FC = () => {
                            onClick={async () => {
                              setIsFinalizing(true);
                              try {
-                               const result = await finalize(meetingId, "vi");
+                               const result = await finalize(meetingId);
                                applyFinalizeResult(result);
                              } catch {
                                showToast.error("Bản nháp transcript vẫn được giữ lại, nhưng chưa tạo được AI Notes.");

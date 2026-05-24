@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, Filter, SortAsc } from 'lucide-react';
-import type { Group } from '../../types';
+import type { Group } from '../../../types';
 
 interface MeetingFiltersProps {
   searchTerm: string;

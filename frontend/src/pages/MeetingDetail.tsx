@@ -29,9 +29,9 @@ import type { AxiosError } from 'axios';
 import api from '../services/api';
 import { normalizeMeetingDetail } from '../services/mappers';
 import type { ActionItem, MeetingDetail as MeetingDetailType, MeetingTranscriptSegment, AnchoredTextItem } from '../types';
-import AudioPlayer, { type AudioPlayerHandle } from '../components/meeting/AudioPlayer';
-import ActionItemComposer from '../components/meeting/ActionItemComposer';
-import MeetingActionItemCard from '../components/meeting/MeetingActionItemCard';
+import AudioPlayer, { type AudioPlayerHandle } from '../features/meeting/components/AudioPlayer';
+import ActionItemComposer from '../features/meeting/components/ActionItemComposer';
+import MeetingActionItemCard from '../features/meeting/components/MeetingActionItemCard';
 import { useAuth } from '../context/AuthContext';
 import { showToast, EditTitleModal, Modal, PageState } from '../components/ui';
 import type { ActionItemAssigneeOption, TranscriptAnchor } from '../types/actionItem';
@@ -60,6 +60,14 @@ type ActionEditDraft = {
 
 type ExportFormat = 'pdf' | 'docx';
 type ExportLanguage = 'vi' | 'en' | 'ja' | 'zh' | 'ko';
+
+const SUPPORTED_MEETING_LANGUAGES = [
+  { code: 'vi', label: '🇻🇳 Tiếng Việt' },
+  { code: 'en', label: '🇺🇸 English' },
+  { code: 'zh', label: '🇨🇳 中文' },
+  { code: 'ja', label: '🇯🇵 日本語' },
+  { code: 'ko', label: '🇰🇷 한국어' },
+];
 
 type ActivityFeedItem = {
   id: string;
@@ -332,9 +340,8 @@ const MeetingDetail: React.FC = () => {
 
   const meeting = query.data;
   const selectedSummary = meeting?.summaries?.find((s) => s.language === summaryLanguage);
-  const actionItems = (meeting?.actionItems || []).filter(
-    (item) => !selectedSummary?.id || item.summary_id === selectedSummary.id,
-  );
+  const availableSummaryLanguages = new Set((meeting?.summaries || []).map((summary) => summary.language).filter(Boolean));
+  const actionItems = meeting?.actionItems || [];
 
   const sectionLabels: Record<string, Record<string, string>> = {
     vi: { summary: 'Tóm tắt', keyPoints: 'Điểm chính', decisions: 'Quyết định',
@@ -555,11 +562,18 @@ const MeetingDetail: React.FC = () => {
   }, [pendingTranscriptAnchor, transcriptGroups, isAudioReady, hasMeetingAudio]);
 
   useEffect(() => {
-    if (!languageInitialized && meeting?.transcriptLanguage) {
-      setSummaryLanguage(meeting.transcriptLanguage);
+    setLanguageInitialized(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (!languageInitialized && meeting) {
+      const preferredLanguage = meeting.summaries.some((summary) => summary.language === 'vi')
+        ? 'vi'
+        : meeting.summaries[0]?.language || meeting.transcriptLanguage || 'vi';
+      setSummaryLanguage(preferredLanguage);
       setLanguageInitialized(true);
     }
-  }, [meeting?.transcriptLanguage, languageInitialized]);
+  }, [meeting, languageInitialized]);
 
   useEffect(() => {
     if (!exportLanguageInitialized) {
@@ -621,12 +635,11 @@ const MeetingDetail: React.FC = () => {
         ),
     );
 
-  const handleRegenerateAINotes = async (lang?: string) => {
+  const handleRegenerateAINotes = async () => {
     if (!id || !transcript) return;
-    const targetLang = lang || summaryLanguage;
     setIsRegenerating(true);
     try {
-      const response = await api.post(`/api/meetings/${id}/finalize`, {
+      const response = await api.post(`/api/meetings/${id}/ai-notes/regenerate`, {
         transcript,
         segments: transcriptSegments.map((segment) => ({
           speaker: segment.speakerRawLabel || segment.speakerLabel,
@@ -636,12 +649,11 @@ const MeetingDetail: React.FC = () => {
           language: segment.language,
           confidence: segment.confidenceScore,
         })),
-        language: targetLang,
         regenerate: true,
       });
       const result = response.data;
       if (result?.summary_status === "COMPLETED") {
-        showToast.success("Đã tạo lại AI Notes thành công!");
+        showToast.success("Đã tạo lại AI Notes cho tất cả ngôn ngữ!");
         query.refetch();
       } else {
         showToast.error("Tạo AI Notes thất bại. Kiểm tra log backend.");
@@ -1475,27 +1487,44 @@ const MeetingDetail: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Language Selector + Generate/Regenerate Button */}
+                      {/* Language Viewer + Regenerate All Button */}
                       {transcript && (
-                        <div className="flex items-center gap-3">
-                          <select
-                            value={summaryLanguage}
-                            onChange={(e) => setSummaryLanguage(e.target.value)}
-                            className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-bold text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                          >
-                            <option value="vi">🇻🇳 Tiếng Việt</option>
-                            <option value="en">🇺🇸 English</option>
-                            <option value="zh">🇨🇳 中文</option>
-                            <option value="ja">🇯🇵 日本語</option>
-                            <option value="ko">🇰🇷 한국어</option>
-                          </select>
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-slate-500">Xem ngôn ngữ</span>
+                            <select
+                              value={summaryLanguage}
+                              onChange={(e) => setSummaryLanguage(e.target.value)}
+                              className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-bold text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                            >
+                              {SUPPORTED_MEETING_LANGUAGES.map((language) => (
+                                <option key={language.code} value={language.code}>
+                                  {language.label}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="flex flex-wrap gap-1.5">
+                              {SUPPORTED_MEETING_LANGUAGES.map((language) => (
+                                <span
+                                  key={language.code}
+                                  className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                                    availableSummaryLanguages.has(language.code)
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                      : 'bg-gray-100 text-gray-400 dark:bg-slate-800 dark:text-slate-500'
+                                  }`}
+                                >
+                                  {language.code}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                           <button
-                            onClick={() => handleRegenerateAINotes(summaryLanguage)}
+                            onClick={handleRegenerateAINotes}
                             disabled={isRegenerating}
-                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-sm font-black text-white transition hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-sm font-black text-white transition hover:from-indigo-500 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <RefreshCw size={16} className={isRegenerating ? "animate-spin" : ""} />
-                            {isRegenerating ? "Đang tạo AI Notes..." : summaryFailed ? "Thử lại tạo AI Notes" : "Tạo lại AI Notes"}
+                            {isRegenerating ? "Đang tạo AI Notes cho 5 ngôn ngữ..." : summaryFailed ? "Thử lại AI Notes cho tất cả ngôn ngữ" : "Tạo lại AI Notes cho tất cả ngôn ngữ"}
                           </button>
                         </div>
                       )}

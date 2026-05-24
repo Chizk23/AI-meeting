@@ -14,9 +14,9 @@ import {
 } from 'lucide-react';
 import { useAppStore, useOrgStore } from '../stores';
 import { AnimatedCounter, PageState, StatCard } from '../components/ui';
-import EditMeetingModal from '../components/meeting/EditMeetingModal';
-import MeetingCard from '../components/meeting/MeetingCard';
-import MeetingFilters from '../components/meeting/MeetingFilters';
+import EditMeetingModal from '../features/meeting/components/EditMeetingModal';
+import MeetingCard from '../features/meeting/components/MeetingCard';
+import MeetingFilters from '../features/meeting/components/MeetingFilters';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { usePermission } from '../hooks/usePermission';

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -178,8 +179,9 @@ const CreateMeeting: React.FC = () => {
           participants: selectedParticipants,
         },
       });
-    } catch (err: any) {
-      showToast.error(err?.response?.data?.detail || "Không thể tạo cuộc họp live");
+    } catch (err) {
+      const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : undefined;
+      showToast.error(detail || "Không thể tạo cuộc họp live");
     } finally {
       setIsSubmitting(false);
     }
@@ -224,10 +226,10 @@ const CreateMeeting: React.FC = () => {
           </button>
           <div>
             <h1 className="text-xl font-black text-gray-900 dark:text-slate-100">
-              {title || "Tạo cuộc họp"}
+              {title || "Tạo và vào phòng ngay"}
             </h1>
             <p className="text-xs text-gray-400 dark:text-slate-500">
-              {selectedGroup?.name || currentOrgId ? "Thiết lập và bắt đầu" : ""}
+              {selectedGroup?.name || currentOrgId ? "Cuộc họp live sẽ bắt đầu ngay sau khi tạo" : ""}
             </p>
           </div>
 
@@ -589,7 +591,7 @@ const CreateMeeting: React.FC = () => {
               isLoading={isSubmitting}
               disabled={!selectedGroupId || groups.length === 0}
             >
-              Vào phòng họp
+              Tạo và vào phòng ngay
             </Button>
           </div>
         </motion.div>

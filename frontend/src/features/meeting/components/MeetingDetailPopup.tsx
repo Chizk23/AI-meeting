@@ -1,14 +1,14 @@
 import React from 'react';
-import { Modal } from '../ui';
+import { Modal } from '../../../components/ui';
 import { Users, Clock, User, Calendar as CalendarIcon, Building2, FolderOpen, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
-import type { MeetingDetail } from '../../types';
-import { normalizeMeetingDetail } from '../../services/mappers';
-import { useAuth } from '../../context/AuthContext';
-import { usePermission } from '../../hooks/usePermission';
+import api from '../../../services/api';
+import type { MeetingDetail } from '../../../types';
+import { normalizeMeetingDetail } from '../../../services/mappers';
+import { useAuth } from '../../../context/AuthContext';
+import { usePermission } from '../../../hooks/usePermission';
 import EditMeetingModal from './EditMeetingModal';
-import { toast } from '../ui/Toast';
+import { toast } from '../../../components/ui/Toast';
 
 interface MeetingDetailPopupProps {
   meetingId: string | null;

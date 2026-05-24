@@ -2,7 +2,7 @@ import React from 'react';
 import { Calendar, Check, Plus, UserPlus, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
-import type { ActionItem, ActionItemAssigneeOption } from '../../types/actionItem';
+import type { ActionItem, ActionItemAssigneeOption } from '../../../types/actionItem';
 
 type ActionItemComposerProps = {
   canManage: boolean;
