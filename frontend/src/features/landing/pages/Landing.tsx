@@ -9,7 +9,7 @@ import {
   PricingSection,
   CtaSection,
   Footer,
-} from '../components/landing';
+} from '../../../components/landing';
 
 const Landing: React.FC = () => {
   return (

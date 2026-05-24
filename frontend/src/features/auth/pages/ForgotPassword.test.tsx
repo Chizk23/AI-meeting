@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import ForgotPassword from './ForgotPassword';
 
 const postMock = vi.fn();
-vi.mock('../services/api', () => ({
+vi.mock('../../../services/api', () => ({
   default: {
     post: (...args: unknown[]) => postMock(...args),
   },

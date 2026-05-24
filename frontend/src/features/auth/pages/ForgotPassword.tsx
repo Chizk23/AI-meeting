@@ -4,8 +4,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ArrowLeft, Check, Mail, Lock, Eye, EyeOff, ArrowRight, Clock, KeyRound, ShieldCheck } from 'lucide-react';
-import { Button, Input, Logo } from '../components/ui';
-import api from '../services/api';
+import { Button, Input, Logo } from '../../../components/ui';
+import api from '../../../services/api';
 
 // Step 1 schema
 const step1Schema = z.object({

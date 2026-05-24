@@ -1,12 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Building2, Clock3, Link as LinkIcon, Plus, LogOut, Mail, CheckCircle2 } from 'lucide-react';
-import { Button, Input, Logo } from '../components/ui';
-import { useAuth } from '../context/AuthContext';
-import { useOrgStore } from '../stores';
-import api from '../services/api';
-import { normalizeOrganization } from '../services/mappers';
-import type { Organization } from '../types';
+import { Button, Input, Logo } from '../../../components/ui';
+import { useAuth } from '../../../context/AuthContext';
+import { useOrgStore } from '../../../stores';
+import api from '../../../services/api';
+import { normalizeOrganization } from '../../../services/mappers';
+import type { Organization } from '../../../types';
 
 const extractInviteToken = (value: string): string => {
   const trimmed = value.trim();

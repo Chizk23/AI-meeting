@@ -4,8 +4,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Crown, User, ChevronDown, Check, Lock, ArrowRight, Eye, EyeOff, Mic, Sparkles, Users } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { Button, Input, Logo } from '../components/ui';
+import { useAuth } from '../../../context/AuthContext';
+import { Button, Input, Logo } from '../../../components/ui';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Vui lòng nhập tên đăng nhập'),
