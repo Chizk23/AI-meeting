@@ -210,7 +210,7 @@ def test_get_meeting_by_id(client, auth_context):
 
 
 def test_mark_participant_left_sets_left_at(client):
-    from src.api.core.meeting_operations import mark_participant_attended, mark_participant_left
+    from src.api.domains.meetings.operations import mark_participant_attended, mark_participant_left
 
     db = TestingSessionLocal()
     try:

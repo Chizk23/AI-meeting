@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import HTTPException
 
-from src.api.core.upload_jobs import create_retry_job, get_upload_job, start_upload_job
+from src.api.domains.meetings.upload_jobs import create_retry_job, get_upload_job, start_upload_job
 
 def get_job_status_payload(job_id: str) -> Dict[str, Any]:
     job = get_upload_job(job_id)

@@ -64,7 +64,7 @@ def list_action_items_payload(
         meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
-        from src.api.core.meeting_operations import require_meeting_room_access
+        from src.api.domains.meetings.operations import require_meeting_room_access
 
         require_meeting_room_access(db, current_user, meeting)
         query = query.filter(models.ActionItem.meeting_id == meeting_id)

@@ -8,7 +8,7 @@ from src.api.core.user_payloads import (
     meeting_participant_meeting_ids_for_user,
     user_org_ids,
 )
-from src.api.core.meetings_support import normalize_speaker_label
+from src.api.domains.meetings.support import normalize_speaker_label
 from src.api.core.action_item_support import action_item_visible_to_user, serialize_action_item_payload
 
 

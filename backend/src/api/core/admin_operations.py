@@ -20,7 +20,7 @@ from src.api.core.admin_runtime import (
     persist_admin_setting,
 )
 from src.api.core.notifications_support import create_persisted_notification
-from src.api.core.upload_jobs import feature_flags_for_user
+from src.api.domains.meetings.upload_jobs import feature_flags_for_user
 from src.api.core.user_payloads import format_user_payload
 from src.api.crud import update_user
 

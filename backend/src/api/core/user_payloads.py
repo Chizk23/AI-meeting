@@ -114,7 +114,7 @@ def get_meeting_by_id(db, meeting_id: str) -> models.Meeting:
     return meeting
 
 def ensure_speaker_mapping(db, meeting_id: str, speaker_label: str, display_name: str):
-    from src.api.core.meetings_support import normalize_speaker_label
+    from src.api.domains.meetings.support import normalize_speaker_label
     mapping = db.query(models.MeetingSpeakerMapping).filter(
         models.MeetingSpeakerMapping.meeting_id == meeting_id,
         models.MeetingSpeakerMapping.speaker_label == speaker_label,

@@ -1,4 +1,4 @@
-from src.api.core.nlp_support import build_structured_summary_prompts
+from src.api.domains.meetings.prompts import build_structured_summary_prompts
 
 
 def test_structured_summary_prompt_includes_source_language_context():
