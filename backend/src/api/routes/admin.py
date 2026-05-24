@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from src.api import auth
-from src.api.core.admin_operations import (
+from src.api.domains.admin.operations import (
     create_admin_broadcast_payload,
     delete_admin_broadcast_payload,
     delete_admin_user_payload,

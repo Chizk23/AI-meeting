@@ -16,7 +16,7 @@ from src.api.crud import (
     create_organization,
     create_user,
 )
-from src.api.core.admin_runtime import append_admin_audit_log
+from src.api.domains.admin.runtime import append_admin_audit_log
 
 
 def login(client: TestClient, username: str, password: str = "securepassword123") -> str:

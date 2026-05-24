@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from src.api.database import Base, get_db
 from src.api.main import app
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
 
 
 @pytest.fixture(autouse=True)

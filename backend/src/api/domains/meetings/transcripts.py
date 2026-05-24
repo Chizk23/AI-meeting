@@ -205,7 +205,7 @@ async def finalize_meeting_transcript(
     body: Optional[Dict[str, Any]] = None,
 ):
     """Save transcript from request or drafts, then summarize and persist stable meeting artifacts."""
-    from src.api.core.admin_runtime import ADMIN_PROMPTS
+    from src.api.domains.admin.runtime import ADMIN_PROMPTS
     from src.api.domains.meetings.operations import (
         format_summary_payload,
         get_speaker_mapping_dict,

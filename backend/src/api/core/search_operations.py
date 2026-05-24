@@ -9,7 +9,7 @@ from src.api.core.user_payloads import (
     user_org_ids,
 )
 from src.api.domains.meetings.support import normalize_speaker_label
-from src.api.core.action_item_support import action_item_visible_to_user, serialize_action_item_payload
+from src.api.domains.action_items.support import action_item_visible_to_user, serialize_action_item_payload
 
 
 def search_entities_payload(q: str, db: Session, current_user: models.User) -> List[Dict[str, Any]]:

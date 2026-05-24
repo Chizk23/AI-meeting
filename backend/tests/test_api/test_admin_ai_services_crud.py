@@ -20,7 +20,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
 from src.api.crud import create_user
 
 

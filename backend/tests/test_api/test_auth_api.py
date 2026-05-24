@@ -271,7 +271,7 @@ def test_member_created_organization_requires_approval_then_promotes_creator(cli
 
 
 def test_register_blocked_when_public_registration_disabled(client):
-    from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+    from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
     saved = ADMIN_SYSTEM_SETTINGS.get("public_registration_enabled", True)
     ADMIN_SYSTEM_SETTINGS["public_registration_enabled"] = False
     try:
@@ -287,7 +287,7 @@ def test_register_blocked_when_public_registration_disabled(client):
 
 def test_register_with_invite_token_allowed_even_when_public_registration_disabled(client):
     """Invited users must still be able to register when public registration is off."""
-    from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+    from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
     saved = ADMIN_SYSTEM_SETTINGS.get("public_registration_enabled", True)
     ADMIN_SYSTEM_SETTINGS["public_registration_enabled"] = False
     try:

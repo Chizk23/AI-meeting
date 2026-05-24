@@ -233,7 +233,7 @@ def test_search_and_registered_user_invitation_flow(client: TestClient, db_sessi
     assert alias_response.status_code == 200
     assert alias_response.json() == []
 
-    monkeypatch.setattr("src.api.core.organization_operations.send_email", lambda *args, **kwargs: False)
+    monkeypatch.setattr("src.api.domains.organizations.operations.send_email", lambda *args, **kwargs: False)
 
     invalid_group = client.post(
         "/api/invitations",

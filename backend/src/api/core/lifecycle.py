@@ -109,7 +109,7 @@ async def startup_event():
         _ensure_meeting_runtime_columns()
         _ensure_action_item_assignee_backfill()
 
-        from src.api.core.admin_runtime import (
+        from src.api.domains.admin.runtime import (
             ensure_admin_runtime_tables,
             reload_admin_runtime_from_db,
         )

@@ -37,13 +37,13 @@ from src.api.domains.meetings.prompts import (
     phobert_enabled_for,
 )
 from src.api.domains.meetings.transcripts import build_transcript_from_drafts, serialize_transcript_draft_chunks
-from src.api.core.tasks_support import _extract_json_object, _normalize_analysis_payload
+from src.api.domains.meetings.tasks import _extract_json_object, _normalize_analysis_payload
 from src.api.core.user_payloads import get_meeting_by_id, require_meeting_room_access
 from src.api.crud import add_meeting_participant, create_audio_file, create_meeting, update_meeting
 from src.api.database import SessionLocal, get_db
 from src.cost.cost_logger import CostLogger
-from src.api.core.admin_operations import ADMIN_PROMPTS
-from src.api.core.admin_runtime import ADMIN_SYSTEM_SETTINGS
+from src.api.domains.admin.operations import ADMIN_PROMPTS
+from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["stt"])
