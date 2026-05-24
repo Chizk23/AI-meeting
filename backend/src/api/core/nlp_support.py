@@ -239,7 +239,7 @@ def build_structured_summary_prompts(
         )
     user_prompt = (
         f"Admin guidance, lower priority than the concise JSON rules above:\n{custom_instruction.strip()}\n\n"
-        f"{nlp_block}\n"
+        f"{nlp_block}{source_block}\n"
         f"Return JSON in exactly this schema:\n"
         "{\n"
         '  "meeting_summary": "4-7 clear sentences covering objective/context, main discussion, outcomes, and next direction when present",\n'
@@ -277,5 +277,4 @@ def build_speaker_aware_transcript(
         start = float(segment.get("start", segment.get("start_time", 0)) or 0)
         lines.append(f"[{start:0.1f}s] {display_name}: {text}")
     return "\n".join(lines) or transcript_text
-
 
