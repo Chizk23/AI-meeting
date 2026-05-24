@@ -14,7 +14,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from src.api import auth, models
-from src.api.core.app_state import (
+from src.api.runtime.app_state import (
     AUDIO_UPLOAD_DIR,
     LEGACY_AUDIO_UPLOAD_DIR,
     ensure_audio_upload_dir,

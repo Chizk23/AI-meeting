@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from sqlalchemy.orm import joinedload
 
 from src.api import models
-from src.api.core.app_state import config, logger
+from src.api.runtime.app_state import config, logger
 from src.api.database import engine, SessionLocal, health_check as db_health_check, close_db_connections
 
 

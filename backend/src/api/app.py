@@ -3,8 +3,8 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.core.app_state import config, logger
-from src.api.core.lifecycle import register_lifecycle
+from src.api.runtime.app_state import config, logger
+from src.api.runtime.lifecycle import register_lifecycle
 from src.api.logging_middleware import RequestLoggingMiddleware
 from src.api.maintenance_middleware import MaintenanceModeMiddleware
 from src.api.rate_limiting import RateLimitMiddleware

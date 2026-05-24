@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from src.api import auth, models, schemas
-from src.api.core.app_state import config, ensure_audio_upload_dir, resolve_audio_storage_path
+from src.api.runtime.app_state import config, ensure_audio_upload_dir, resolve_audio_storage_path
 from src.api.domains.meetings.support import (
     estimate_segment_end,
     normalize_speaker_label,

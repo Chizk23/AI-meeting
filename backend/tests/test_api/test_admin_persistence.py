@@ -42,7 +42,7 @@ def client(monkeypatch):
     # Make admin_runtime persistence target the test engine instead of the
     # production database. We do this via a small indirection added to
     # admin_runtime: a module-level `get_runtime_session` callable.
-    from src.api.core import admin_runtime as runtime
+    from src.api.domains.admin import runtime
     monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db

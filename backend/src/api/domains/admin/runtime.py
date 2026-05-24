@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from src.api import models
-from src.api.core.app_state import logger
+from src.api.runtime.app_state import logger
 from src.api.database import SessionLocal, engine
 
 MAX_ADMIN_AUDIT_LOGS = 2000

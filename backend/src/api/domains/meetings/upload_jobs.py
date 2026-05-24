@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from src.api import models
-from src.api.core.app_state import config
+from src.api.runtime.app_state import config
 from src.api.domains.meetings.operations import ensure_speaker_mapping
 from src.api.domains.meetings.transcripts import finalize_meeting_transcript
 from src.api.database import SessionLocal

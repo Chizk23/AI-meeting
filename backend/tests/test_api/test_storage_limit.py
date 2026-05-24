@@ -48,7 +48,7 @@ def override_get_db():
 
 @pytest.fixture(scope="function")
 def client(monkeypatch, tmp_path):
-    from src.api.core import admin_runtime as runtime
+    from src.api.domains.admin import runtime
     monkeypatch.setattr(runtime, "_runtime_session_factory", TestingSessionLocal)
     # Point uploads at a per-test temp dir so we don't write into the repo.
     monkeypatch.setenv("AUDIO_UPLOAD_DIR", str(tmp_path / "uploads"))
