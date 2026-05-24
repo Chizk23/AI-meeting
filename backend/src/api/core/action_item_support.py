@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from src.api import auth, models
 from src.api.crud import get_user_by_email, get_user_by_id
-from src.api.core.meeting_operations import (
+from src.api.domains.meetings.operations import (
     _anchor_from_segments,
     _latest_processed_record,
     broadcast_meeting_room_event,

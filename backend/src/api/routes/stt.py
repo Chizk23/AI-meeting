@@ -17,12 +17,12 @@ from sqlalchemy import func
 
 from src.api import auth, models, schemas
 from src.api.core.app_state import config, ensure_audio_upload_dir, resolve_audio_storage_path
-from src.api.core.meetings_support import (
+from src.api.domains.meetings.support import (
     estimate_segment_end,
     normalize_speaker_label,
 )
-from src.api.core.meeting_operations import ensure_speaker_identity_mapping, get_ws_user, meeting_room_manager
-from src.api.core.upload_jobs import (
+from src.api.domains.meetings.operations import ensure_speaker_identity_mapping, get_ws_user, meeting_room_manager
+from src.api.domains.meetings.upload_jobs import (
     UploadMeetingJob,
     normalize_upload_language,
     register_upload_job,
@@ -30,13 +30,13 @@ from src.api.core.upload_jobs import (
     start_upload_job,
     validate_upload_filename,
 )
-from src.api.core.nlp_support import (
+from src.api.domains.meetings.prompts import (
     build_speaker_aware_transcript,
     build_structured_summary_prompts,
     get_phobert_processor,
     phobert_enabled_for,
 )
-from src.api.core.transcript_support import build_transcript_from_drafts, serialize_transcript_draft_chunks
+from src.api.domains.meetings.transcripts import build_transcript_from_drafts, serialize_transcript_draft_chunks
 from src.api.core.tasks_support import _extract_json_object, _normalize_analysis_payload
 from src.api.core.user_payloads import get_meeting_by_id, require_meeting_room_access
 from src.api.crud import add_meeting_participant, create_audio_file, create_meeting, update_meeting

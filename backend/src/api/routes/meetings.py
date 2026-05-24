@@ -7,8 +7,8 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from src.api import auth, models, schemas
-from src.api.core.meetings_support import normalize_speaker_label
-from src.api.core.meeting_operations import (
+from src.api.domains.meetings.support import normalize_speaker_label
+from src.api.domains.meetings.operations import (
     broadcast_participant_list_event,
     build_meeting_detail_payload,
     build_room_snapshot,
@@ -39,7 +39,7 @@ from src.api.crud import (
 from src.api.core.admin_runtime import append_admin_audit_log
 from src.api.core.notifications_support import get_org_admin_recipient_ids, push_runtime_notification
 from src.api.database import get_db, SessionLocal
-from src.api.core.transcript_support import finalize_meeting_transcript, generate_meeting_ai_notes_all_languages
+from src.api.domains.meetings.transcripts import finalize_meeting_transcript, generate_meeting_ai_notes_all_languages
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["meetings"])
