@@ -6,38 +6,53 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, Keyboard, Camera } from "lucide-react";
 import { Card, Button, Input, showToast } from "../components/ui";
+import api from "../services/api";
+import { normalizeMeetingDetail } from "../services/mappers";
+import { getMeetingJoinState } from "../utils/meetingFlow";
 
 const JoinMeeting: React.FC = () => {
   const navigate = useNavigate();
   const { code: urlCode } = useParams<{ code?: string }>();
   const [code, setCode] = useState(urlCode || "");
   const [mode, setMode] = useState<"code" | "qr">("code");
+  const [isChecking, setIsChecking] = useState(false);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const trimmed = code.trim().toUpperCase();
     if (!trimmed) {
       showToast.error("Vui lòng nhập mã tham gia");
       return;
     }
-    navigate(`/room/${trimmed}`, {
-      state: {
-        title: "Cuộc họp",
-        enableCamera: true,
-        enableMic: true,
-        enableRecord: true,
-        participants: [{ id: "1", name: "Bạn", role: "attendee" }],
-      },
-    });
+    setIsChecking(true);
+    try {
+      const response = await api.get(`/api/meetings/by-code/${trimmed}`);
+      const meeting = normalizeMeetingDetail(response.data);
+      const joinState = getMeetingJoinState(meeting);
+      if (!joinState.canJoin) {
+        showToast.error(joinState.reason || "Chưa thể tham gia cuộc họp này");
+        return;
+      }
+      navigate(joinState.href, {
+        state: {
+          title: meeting.title,
+          enableCamera: true,
+          enableMic: true,
+          enableRecord: true,
+          participants: meeting.attendees,
+        },
+      });
+    } catch {
+      showToast.error("Mã tham gia không hợp lệ hoặc bạn không có quyền vào phòng");
+    } finally {
+      setIsChecking(false);
+    }
   };
 
-  // Auto-join if code in URL
   React.useEffect(() => {
     if (urlCode) {
       setCode(urlCode);
-      // Optional: auto-join
-      // navigate(`/room/${urlCode}`, { state: { ... } });
     }
-  }, [urlCode, navigate]);
+  }, [urlCode]);
 
   return (
     <div className="app-bg flex min-h-screen items-center justify-center px-4 py-8">
@@ -94,6 +109,7 @@ const JoinMeeting: React.FC = () => {
                 onClick={handleJoin}
                 className="w-full"
                 size="lg"
+                isLoading={isChecking}
                 icon={<ArrowRight size={18} />}
               >
                 Tham gia

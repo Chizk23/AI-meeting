@@ -23,7 +23,7 @@ import { StatCard, Button, AnimatedCounter } from "../components/ui";
 import { useOrgStore } from "../stores";
 import { useAppStore } from "../stores";
 import { usePermission } from "../hooks";
-import MeetingCard from "../components/meeting/MeetingCard";
+import MeetingCard from "../features/meeting/components/MeetingCard";
 import { clsx } from "clsx";
 
 const Dashboard: React.FC = () => {

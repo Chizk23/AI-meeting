@@ -187,6 +187,9 @@ def build_structured_summary_prompts(
     custom_instruction: str,
     language: str = "vi",
     nlp_metadata: Optional[Dict[str, Any]] = None,
+    *,
+    source_language: Optional[str] = None,
+    include_action_items: bool = True,
 ) -> tuple[str, str]:
     lang_names = {"vi": "Vietnamese", "en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean"}
     lang_name = lang_names.get(language, "Vietnamese")
@@ -198,6 +201,7 @@ def build_structured_summary_prompts(
         f"JSON must have exactly 8 keys: meeting_summary, key_points, decisions, action_items, risks, open_questions, timeline_highlights, speaker_summaries. "
         f"Create a balanced, useful meeting brief: complete enough to preserve the important content, but not a verbatim transcript. "
         f"Use only facts explicitly supported by the transcript. Do not invent decisions, owners, deadlines, or tasks. "
+        f"For multilingual output, translate the same source facts into the requested language; do not add, remove, or reinterpret facts. "
         f"meeting_summary must be 4-7 clear sentences and under {AI_SUMMARY_MAX_CHARS} characters. It must mention the meeting objective/context, main discussion themes, outcomes, and next direction when present. "
         f"key_points has at most {AI_KEY_POINTS_LIMIT} important points and should cover distinct discussion topics, not only final conclusions. "
         f"decisions has at most {AI_DECISIONS_LIMIT} explicit decisions, agreements, approvals, or confirmed directions, or an empty array. "
@@ -210,6 +214,16 @@ def build_structured_summary_prompts(
         f"speaker_summaries has at most {AI_SPEAKER_SUMMARIES_LIMIT} short strings like 'Name: contribution'. "
         f"If the transcript is short or thin, still provide the useful facts available without padding."
     )
+    action_instruction = (
+        f"action_items has at most {AI_ACTION_ITEMS_LIMIT} explicit tasks with keys: task, owner, deadline. Include only concrete follow-up work. "
+        if include_action_items
+        else "action_items must be an empty array because canonical tasks are generated separately. "
+    )
+    system_prompt = system_prompt.replace(
+        f"action_items has at most {AI_ACTION_ITEMS_LIMIT} explicit tasks with keys: task, owner, deadline. Include only concrete follow-up work. ",
+        action_instruction,
+    )
+    source_block = f"\nSource transcript language: {source_language}." if source_language else ""
     nlp_block = ""
     if nlp_metadata:
         dialect_hint = nlp_metadata.get("dialect_hint") or "unknown"

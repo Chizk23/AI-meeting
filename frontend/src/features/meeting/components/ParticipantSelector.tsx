@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check, User, Users } from 'lucide-react';
-import type { GroupMember } from '../../hooks/useGroupMembers';
+import type { GroupMember } from '../../../hooks/useGroupMembers';
 
 interface ParticipantSelectorProps {
   members: GroupMember[];

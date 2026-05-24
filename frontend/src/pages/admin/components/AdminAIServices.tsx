@@ -1,6 +1,7 @@
 import React from 'react';
-import { Cpu, Mic, Brain, CheckCircle2, XCircle, Radio, DollarSign } from 'lucide-react';
+import { Cpu, Mic, Brain, CheckCircle2, XCircle, Radio, DollarSign, Settings, Save, Building2 } from 'lucide-react';
 import api from '../../../services/api';
+import { toast } from '../../../components/ui/Toast';
 
 type LLMService = {
   name: string;
@@ -42,6 +43,31 @@ type AIServiceConfig = {
     services: NLPService[];
   };
 };
+
+type OrgCostBucket = {
+  organization_id: string | null;
+  organization_name: string;
+  total_cost_usd: number;
+  by_service: Record<string, number>;
+};
+
+type CostBreakdown = {
+  currency: string;
+  total_cost_usd: number;
+  organizations: OrgCostBucket[];
+};
+
+const LLM_PROVIDER_OPTIONS = [
+  { value: 'google', label: 'Google Gemini' },
+  { value: 'groq', label: 'Groq' },
+  { value: 'router', label: 'OpenRouter' },
+];
+
+const STT_PROVIDER_OPTIONS = [
+  { value: 'deepgram', label: 'Deepgram' },
+  { value: 'phowhisper', label: 'PhoWhisper' },
+  { value: 'viwhisper', label: 'ViWhisper' },
+];
 
 type UsageEntry = {
   service: string;
@@ -101,31 +127,72 @@ const serviceLabel = (service: string, model: string) => {
 const AdminAIServices: React.FC = () => {
   const [config, setConfig] = React.useState<AIServiceConfig | null>(null);
   const [usage, setUsage] = React.useState<UsageData | null>(null);
+  const [costs, setCosts] = React.useState<CostBreakdown | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
 
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const [configRes, usageRes] = await Promise.all([
-          api.get('/api/admin/ai-services'),
-          api.get('/api/admin/ai-services/usage').catch(() => ({ data: { services: [], monthly_cost_usd: 0, daily_cost_usd: 0 } })),
-        ]);
-        if (!cancelled) {
-          setConfig(configRes.data);
-          setUsage(usageRes.data);
-        }
-      } catch (err: any) {
-        if (!cancelled) setError(err?.response?.data?.detail || 'Khong tai duoc cau hinh AI services');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+  // Provider override form state
+  const [llmProvider, setLlmProvider] = React.useState('');
+  const [sttProvider, setSttProvider] = React.useState('');
+  const [geminiModel, setGeminiModel] = React.useState('');
+  const [deepgramModel, setDeepgramModel] = React.useState('');
+  const [groqModel, setGroqModel] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const hydrateForm = (cfg: AIServiceConfig) => {
+    setLlmProvider(cfg.llm.provider || '');
+    setSttProvider(cfg.stt.provider || '');
+    const groq = cfg.llm.services.find((s) => s.name?.toLowerCase().includes('groq'));
+    const gemini = cfg.llm.services.find((s) => s.name?.toLowerCase().includes('gemini') || s.name?.toLowerCase().includes('google'));
+    const dg = cfg.stt.available_providers.find((p) => p.id === 'deepgram');
+    setGroqModel(groq?.model || '');
+    setGeminiModel(gemini?.model || '');
+    setDeepgramModel(dg?.model || '');
+  };
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [configRes, usageRes, costsRes] = await Promise.all([
+        api.get('/api/admin/ai-services'),
+        api.get('/api/admin/ai-services/usage').catch(() => ({ data: { services: [], monthly_cost_usd: 0, daily_cost_usd: 0 } })),
+        api.get('/api/admin/costs').catch(() => ({ data: null })),
+      ]);
+      setConfig(configRes.data);
+      setUsage(usageRes.data);
+      setCosts(costsRes.data);
+      hydrateForm(configRes.data);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || 'Khong tai duoc cau hinh AI services');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleSaveOverrides = async () => {
+    setSaving(true);
+    try {
+      const payload: Record<string, string> = {};
+      if (llmProvider) payload.llm_provider = llmProvider;
+      if (sttProvider) payload.stt_provider = sttProvider;
+      if (geminiModel) payload.gemini_model = geminiModel;
+      if (deepgramModel) payload.deepgram_model = deepgramModel;
+      if (groqModel) payload.groq_model = groqModel;
+      const res = await api.patch('/api/admin/ai-services', payload);
+      setConfig(res.data);
+      hydrateForm(res.data);
+      toast.success('Da cap nhat cau hinh AI services');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Khong cap nhat duoc cau hinh');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return <p className="text-sm text-gray-500">Dang tai cau hinh AI services...</p>;
@@ -137,6 +204,129 @@ const AdminAIServices: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Provider Overrides */}
+      <div className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="rounded-xl bg-indigo-50 p-2 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400">
+            <Settings size={20} />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-gray-900 dark:text-slate-100">Cau hinh provider</h3>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              Doi LLM / STT provider va model ngay tu UI. Khong can sua .env hay restart.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-gray-500">LLM provider</label>
+            <select
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+            >
+              {LLM_PROVIDER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-gray-500">STT provider</label>
+            <select
+              value={sttProvider}
+              onChange={(e) => setSttProvider(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+            >
+              {STT_PROVIDER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-gray-500">Gemini model</label>
+            <input
+              value={geminiModel}
+              onChange={(e) => setGeminiModel(e.target.value)}
+              placeholder="gemini-2.0-flash"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-gray-500">Deepgram model</label>
+            <input
+              value={deepgramModel}
+              onChange={(e) => setDeepgramModel(e.target.value)}
+              placeholder="nova-2"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-gray-500">Groq / OpenRouter model</label>
+            <input
+              value={groqModel}
+              onChange={(e) => setGroqModel(e.target.value)}
+              placeholder="llama-3.3-70b-versatile"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveOverrides}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-black text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            <Save size={16} />
+            {saving ? 'Dang luu...' : 'Luu cau hinh'}
+          </button>
+        </div>
+      </div>
+
+      {/* Chi phi theo to chuc (P2 #20) */}
+      {costs && costs.organizations && costs.organizations.length > 0 && (
+        <div className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="rounded-xl bg-amber-50 p-2 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
+              <Building2 size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-gray-900 dark:text-slate-100">Chi phi theo to chuc</h3>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Tong chi phi: <span className="font-bold text-gray-700 dark:text-slate-200">{formatCost(costs.total_cost_usd)}</span>
+                {' '}&middot; sort theo chi tieu giam dan
+              </p>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-slate-800">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 dark:bg-slate-800/60">
+                <tr>
+                  <th className="px-4 py-3 font-bold text-gray-500">To chuc</th>
+                  <th className="px-4 py-3 font-bold text-gray-500">Breakdown</th>
+                  <th className="px-4 py-3 text-right font-bold text-gray-500">Tong</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800">
+                {costs.organizations.map((bucket) => (
+                  <tr key={bucket.organization_id || 'unattributed'} className="transition hover:bg-gray-50/50 dark:hover:bg-slate-800/30">
+                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-slate-100">{bucket.organization_name}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-300">
+                      {Object.entries(bucket.by_service || {}).map(([svc, amt]) => (
+                        <span key={svc} className="mr-2 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 dark:bg-slate-800">
+                          <span className="font-bold">{svc}</span>: {formatCost(amt)}
+                        </span>
+                      ))}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-slate-100">{formatCost(bucket.total_cost_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Usage & Costs */}
       {usage && (
         <div className="rounded-3xl border border-gray-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">

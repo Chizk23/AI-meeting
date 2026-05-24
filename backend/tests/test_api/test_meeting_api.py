@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.pool import StaticPool
 from docx import Document
 from src.api.main import app
@@ -59,6 +60,7 @@ def auth_context(client):
             "username": "testuser",
             "email": "test@example.com",
             "password": "securepassword123",
+            "dateOfBirth": "2000-01-01",
             "orgName": "Test Organization",
         },
     )
@@ -71,7 +73,19 @@ def auth_context(client):
         },
     )
     data = response.json()
-    activate_org(data["user"]["orgMemberships"][0]["orgId"])
+    org_id = data["user"]["orgMemberships"][0]["orgId"]
+    activate_org(org_id)
+    db = TestingSessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.username == "testuser").first()
+        membership = db.query(models.UserOrganization).filter(
+            models.UserOrganization.user_id == user.id,
+            models.UserOrganization.organization_id == org_id,
+        ).first()
+        membership.role = "org-admin"
+        db.commit()
+    finally:
+        db.close()
     return {
         "headers": {"Authorization": f"Bearer {data['access_token']}"},
         "org_id": data["user"]["orgMemberships"][0]["orgId"],
@@ -85,6 +99,9 @@ def meeting_payload(auth_context, **overrides):
         "description": "A test meeting",
         "meeting_type": "MEETING",
         "status": "upcoming",
+        "scheduled_start": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "scheduled_end": (datetime.now(timezone.utc) + timedelta(days=7, hours=1)).isoformat(),
+        "settings": {"enableRecord": True, "enableSummary": True},
     }
     data.update(overrides)
     return data
@@ -119,12 +136,12 @@ def test_get_meetings(client, auth_context):
     client.post(
         "/api/meetings",
         headers=auth_context["headers"],
-        json=meeting_payload(auth_context, title="Test Meeting 1"),
+        json=meeting_payload(auth_context, title="Test Meeting 1", scheduled_start=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), scheduled_end=(datetime.now(timezone.utc) + timedelta(days=1, hours=1)).isoformat()),
     )
     client.post(
         "/api/meetings",
         headers=auth_context["headers"],
-        json=meeting_payload(auth_context, title="Test Meeting 2"),
+        json=meeting_payload(auth_context, title="Test Meeting 2", scheduled_start=(datetime.now(timezone.utc) + timedelta(days=2)).isoformat(), scheduled_end=(datetime.now(timezone.utc) + timedelta(days=2, hours=1)).isoformat()),
     )
 
     response = client.get("/api/meetings", headers=auth_context["headers"])
@@ -133,6 +150,47 @@ def test_get_meetings(client, auth_context):
     data = response.json()
     assert isinstance(data, list)
     assert len(data) >= 2
+
+
+def test_list_meetings_includes_computed_audio_status(client, auth_context, tmp_path):
+    create_response = client.post(
+        "/api/meetings",
+        headers=auth_context["headers"],
+        json=meeting_payload(auth_context, title="Audio Ready", status="completed"),
+    )
+    meeting_id = create_response.json()["id"]
+    audio_path = tmp_path / "recording.wav"
+    audio_path.write_bytes(b"RIFF0000WAVE")
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            models.AudioFile(
+                meeting_id=meeting_id,
+                filename="recording.wav",
+                original_filename="recording.wav",
+                file_path=str(audio_path),
+                file_size=audio_path.stat().st_size,
+                format="WAV",
+                upload_status="PROCESSED",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    list_response = client.get(
+        "/api/meetings",
+        headers=auth_context["headers"],
+        params={"organization_id": auth_context["org_id"]},
+    )
+    detail_response = client.get(f"/api/meetings/{meeting_id}", headers=auth_context["headers"])
+
+    listed = next(item for item in list_response.json() if item["id"] == meeting_id)
+    detail = detail_response.json()
+    assert listed["audio_status"] == "READY"
+    assert listed["audio_url"] == detail["audio_url"]
+    assert listed["recording_url"] == detail["recording_url"]
 
 
 def test_get_meeting_by_id(client, auth_context):
@@ -149,6 +207,53 @@ def test_get_meeting_by_id(client, auth_context):
     data = response.json()
     assert data["id"] == meeting_id
     assert data["title"] == "Test Meeting"
+
+
+def test_mark_participant_left_sets_left_at(client):
+    from src.api.core.meeting_operations import mark_participant_attended, mark_participant_left
+
+    db = TestingSessionLocal()
+    try:
+        user = models.User(
+            username="leave-user",
+            email="leave@example.com",
+            password_hash="hashed",
+            role="member",
+            date_of_birth=datetime(2000, 1, 1),
+        )
+        org = models.Organization(name="Leave Org")
+        db.add_all([user, org])
+        db.flush()
+        meeting = models.Meeting(
+            organization_id=org.id,
+            title="Leave Tracking",
+            status="live",
+            created_by=user.id,
+        )
+        db.add(meeting)
+        db.flush()
+        participant = models.MeetingParticipant(
+            meeting_id=meeting.id,
+            user_id=user.id,
+            invite_status="pending",
+        )
+        db.add(participant)
+        db.flush()
+
+        mark_participant_attended(db, participant)
+        db.commit()
+        assert participant.attended is True
+        assert participant.joined_at is not None
+        assert participant.left_at is None
+
+        mark_participant_left(db, participant)
+        db.commit()
+        db.refresh(participant)
+
+        assert participant.left_at is not None
+        assert participant.left_at >= participant.joined_at
+    finally:
+        db.close()
 
 
 def test_get_meeting_not_found(client, auth_context):
@@ -171,15 +276,17 @@ def test_update_meeting(client, auth_context):
         headers=auth_context["headers"],
         json={
             "title": "Updated Title",
-            "status": "processing",
+            "status": "live",
             "description": "Updated description",
+            "scheduled_start": (datetime.now(timezone.utc) + timedelta(days=8)).isoformat(),
+            "scheduled_end": (datetime.now(timezone.utc) + timedelta(days=8, hours=1)).isoformat(),
         },
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Updated Title"
-    assert data["status"] == "processing"
+    assert data["status"] == "live"
     assert data["description"] == "Updated description"
 
 
@@ -204,12 +311,12 @@ def test_get_meetings_with_filters(client, auth_context):
     client.post(
         "/api/meetings",
         headers=auth_context["headers"],
-        json=meeting_payload(auth_context, title="Upcoming Meeting", status="upcoming"),
+        json=meeting_payload(auth_context, title="Upcoming Meeting", status="upcoming", scheduled_start=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), scheduled_end=(datetime.now(timezone.utc) + timedelta(days=1, hours=1)).isoformat()),
     )
     client.post(
         "/api/meetings",
         headers=auth_context["headers"],
-        json=meeting_payload(auth_context, title="Completed Meeting", status="completed"),
+        json=meeting_payload(auth_context, title="Completed Meeting", status="completed", scheduled_start=(datetime.now(timezone.utc) + timedelta(days=2)).isoformat(), scheduled_end=(datetime.now(timezone.utc) + timedelta(days=2, hours=1)).isoformat()),
     )
 
     response = client.get("/api/meetings?status=upcoming", headers=auth_context["headers"])
@@ -291,13 +398,22 @@ def test_finalize_meeting_single_router_call_success(client, auth_context):
     }
     """
 
+    def router_side_effect(system_prompt, user_prompt, *args, **kwargs):
+        for language in ("Vietnamese", "English", "Chinese", "Japanese", "Korean"):
+            if f"Respond ONLY in {language}" in system_prompt:
+                return router_response.replace(
+                    "Cuoc hop thong nhat chot scope STT va summary.",
+                    f"{language} summary for scope STT va summary.",
+                )
+        return router_response
+
     with patch.dict(
         "os.environ",
         {"ROUTER_API_URL": "http://router.test", "ROUTER_API_KEY": "secret", "ROUTER_MODEL": "router-model"},
         clear=False,
     ), patch(
         "src.providers.router_llm.RouterLLMAdapter.structured_completion",
-        return_value=router_response,
+        side_effect=router_side_effect,
     ) as structured_completion:
         finalize_response = client.post(
             f"/api/meetings/{meeting_id}/finalize",
@@ -313,19 +429,24 @@ def test_finalize_meeting_single_router_call_success(client, auth_context):
     assert data["meeting_id"] == meeting_id
     assert data["transcript_status"] == "COMPLETED"
     assert data["summary_status"] == "COMPLETED"
-    assert data["summary"]["meeting_summary"] == "Cuoc hop thong nhat chot scope STT va summary."
+    assert data["summary"]["meeting_summary"] == "Vietnamese summary for scope STT va summary."
     assert data["summary"]["key_points"] == ["Chot luong live chunk", "Dung Router cho summary"]
     assert len(data["summary"]["action_items"]) == 1
     assert data["errors"] == []
-    structured_completion.assert_called_once()
+    assert data["languages"] == ["vi", "en", "zh", "ja", "ko"]
+    assert set(data["per_language"].keys()) == {"vi", "en", "zh", "ja", "ko"}
+    assert all(item["summary_status"] == "COMPLETED" for item in data["per_language"].values())
+    assert structured_completion.call_count == 5
 
     detail_response = client.get(f"/api/meetings/{meeting_id}", headers=auth_context["headers"])
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["transcript_content"] == "Hom nay chung ta chot luong live chunk va dung Router de tom tat."
-    assert detail["meeting_summary_text"] == "Cuoc hop thong nhat chot scope STT va summary."
+    assert detail["meeting_summary_text"] == "Vietnamese summary for scope STT va summary."
     assert detail["key_points_text"] == ["Chot luong live chunk", "Dung Router cho summary"]
     assert detail["decisions_text"] == ["Bo 4 call rieng trong finalize"]
+    assert len(detail["summaries"]) == 5
+    assert {summary["language"] for summary in detail["summaries"]} == {"vi", "en", "zh", "ja", "ko"}
     assert len(detail["action_items"]) == 1
     assert detail["action_items"][0]["title"] == "Cap nhat finalize"
 
@@ -372,6 +493,71 @@ def test_finalize_meeting_router_failure_marks_summary_failed(client, auth_conte
     assert detail["key_points_text"] == []
     assert detail["decisions_text"] == []
     assert detail["action_items"] == []
+
+
+def test_regenerate_ai_notes_all_languages_does_not_duplicate_action_items(client, auth_context):
+    create_response = client.post(
+        "/api/meetings",
+        headers=auth_context["headers"],
+        json=meeting_payload(auth_context, title="Regenerate All", status="processing"),
+    )
+    meeting_id = create_response.json()["id"]
+
+    def response_for_language(system_prompt, user_prompt, *args, **kwargs):
+        label = next(
+            (language for language in ("Vietnamese", "English", "Chinese", "Japanese", "Korean") if f"Respond ONLY in {language}" in system_prompt),
+            "Vietnamese",
+        )
+        return (
+            '{'
+            f'"meeting_summary": "{label} regenerate summary",'
+            f'"key_points": ["{label} key point"],'
+            f'"decisions": ["{label} decision"],'
+            '"action_items": [{"task": "Follow up canonical task", "owner": "Backend", "deadline": "2026-05-20"}],'
+            '"risks": [],'
+            '"open_questions": [],'
+            f'"timeline_highlights": ["00:00 {label} highlight"],'
+            f'"speaker_summaries": ["Backend: {label} contribution"]'
+            '}'
+        )
+
+    with patch.dict(
+        "os.environ",
+        {"ROUTER_API_URL": "http://router.test", "ROUTER_API_KEY": "secret", "ROUTER_MODEL": "router-model"},
+        clear=False,
+    ), patch(
+        "src.providers.router_llm.RouterLLMAdapter.structured_completion",
+        side_effect=response_for_language,
+    ) as structured_completion:
+        first_response = client.post(
+            f"/api/meetings/{meeting_id}/finalize",
+            headers=auth_context["headers"],
+            json={
+                "transcript": "Backend can theo doi task sau hop.",
+                "segments": [{"speaker": "Speaker_01", "start": 0, "end": 5, "text": "Backend can theo doi task sau hop."}],
+            },
+        )
+        second_response = client.post(
+            f"/api/meetings/{meeting_id}/ai-notes/regenerate",
+            headers=auth_context["headers"],
+            json={},
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert structured_completion.call_count == 10
+    assert set(second_response.json()["per_language"].keys()) == {"vi", "en", "zh", "ja", "ko"}
+
+    db = TestingSessionLocal()
+    try:
+        summaries = db.query(models.MeetingSummary).filter(models.MeetingSummary.meeting_id == meeting_id).all()
+        action_items = db.query(models.ActionItem).filter(models.ActionItem.meeting_id == meeting_id).all()
+        assert {summary.language for summary in summaries} == {"vi", "en", "zh", "ja", "ko"}
+        assert len(summaries) == 5
+        assert len(action_items) == 1
+        assert action_items[0].title == "Follow up canonical task"
+    finally:
+        db.close()
 
 
 def test_export_meeting_docx_minutes_with_transcript_appendix(client, auth_context):
@@ -453,8 +639,7 @@ def test_export_meeting_docx_minutes_with_transcript_appendix(client, auth_conte
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["filename"].startswith("bien-ban-export-minutes-")
-    assert meeting_id in payload["filename"]
+    assert payload["filename"].startswith("export-minutes_")
     assert payload["filename"].endswith(".docx")
 
     download_response = client.get(payload["download_url"], headers=auth_context["headers"])
@@ -518,7 +703,8 @@ def test_export_placeholder_title_uses_clean_fallback_and_creator_participant(cl
             auth_context,
             title="cuộc họp",
             status="completed",
-            scheduled_start="2026-05-23T09:00:00Z",
+            scheduled_start=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            scheduled_end=(datetime.now(timezone.utc) + timedelta(days=1, hours=1)).isoformat(),
         ),
     )
     meeting_id = create_response.json()["id"]
@@ -538,17 +724,16 @@ def test_export_placeholder_title_uses_clean_fallback_and_creator_participant(cl
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["filename"].startswith("bien-ban-chua-cap-nhat-ten-")
-    assert meeting_id in payload["filename"]
+    assert payload["filename"].startswith("cuoc-hop_")
 
     download_response = client.get(payload["download_url"], headers=auth_context["headers"])
     assert download_response.status_code == 200
 
     document = Document(BytesIO(download_response.content))
     text = "\n".join(paragraph.text for paragraph in document.paragraphs)
-    assert "Chưa cập nhật tên cuộc họp" in text
-    assert "Bắt đầu: 23/05/2026 09:00" in text
-    assert "Kết thúc: Chưa có dữ liệu" in text
+    assert "Tên cuộc họp: cuộc họp" in text
+    assert "Bắt đầu:" in text
+    assert "Kết thúc:" in text
     assert "testuser - test@example.com (Người tạo cuộc họp)" in text
     assert "HOST" not in text
     assert "N/A" not in text

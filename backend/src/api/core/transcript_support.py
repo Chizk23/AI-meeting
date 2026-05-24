@@ -16,6 +16,14 @@ from src.api.core.meetings_support import estimate_segment_end, normalize_speake
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_MEETING_LANGUAGES = ("vi", "en", "zh", "ja", "ko")
+CANONICAL_ACTION_ITEM_LANGUAGE = "vi"
+
+
+def normalize_meeting_language(language: Optional[str], default: str = "vi") -> str:
+    normalized = (language or default or "vi").lower().strip()
+    return normalized if normalized in SUPPORTED_MEETING_LANGUAGES else default
+
 
 def next_transcript_chunk_index(db: Session, meeting_id: str, user_id: str) -> int:
     current = db.query(func.max(models.MeetingTranscriptDraft.chunk_index)).filter(
@@ -237,14 +245,16 @@ async def finalize_meeting_transcript(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    language = req_language or getattr(meeting, "language", None) or getattr(current_user, "language", None) or "vi"
-    language = language.lower().strip() if language else "vi"
-    if language not in ("vi", "en", "zh", "ja", "ko"):
-        language = "vi"
+    language = normalize_meeting_language(req_language or getattr(current_user, "language", None) or "vi")
+    persist_transcript = bool(body.get("persist_transcript", True))
+    complete_meeting = bool(body.get("complete_meeting", True))
 
     require_meeting_room_access(db, current_user, meeting)
     original_meeting_status = meeting.status
 
+    db_transcript = db.query(models.Transcript).filter(
+        models.Transcript.meeting_id == meeting_id,
+    ).order_by(models.Transcript.created_at.desc()).first()
     draft_payload = build_transcript_from_drafts(db, meeting_id)
     has_transcript_draft = bool(
         str(draft_payload.get("transcript") or "").strip()
@@ -252,12 +262,25 @@ async def finalize_meeting_transcript(
     )
     if not isinstance(full_text, str) or not full_text.strip():
         full_text = draft_payload["transcript"]
+    if (not isinstance(full_text, str) or not full_text.strip()) and db_transcript:
+        full_text = db_transcript.content or ""
     if not segments:
         segments = draft_payload["segments"]
+    if not segments and db_transcript and db_transcript.segments:
+        segments = [
+            {
+                "speaker": segment.speaker_label,
+                "start": float(segment.start_time or 0),
+                "end": float(segment.end_time or 0),
+                "text": segment.text,
+                "language": getattr(segment, "language", None) or language,
+                "confidence": float(segment.confidence_score) if segment.confidence_score is not None else None,
+            }
+            for segment in db_transcript.segments
+            if (segment.text or "").strip()
+        ]
     if (not req_language or req_language == "auto") and draft_payload["language"] != "auto":
-        language = draft_payload["language"]
-        if language not in ("vi", "en", "zh", "ja", "ko"):
-            language = "vi"
+        language = normalize_meeting_language(draft_payload["language"])
 
     if not isinstance(full_text, str) or not full_text.strip():
         return {
@@ -277,7 +300,7 @@ async def finalize_meeting_transcript(
 
     nlp_metadata = None
     post_processed = False
-    if phobert_enabled_for(language):
+    if persist_transcript and phobert_enabled_for(language):
         try:
             processor = get_phobert_processor()
             processed = processor.process_finalize(full_text, segments if isinstance(segments, list) else [])
@@ -308,142 +331,140 @@ async def finalize_meeting_transcript(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    db_transcript = db.query(models.Transcript).filter(
-        models.Transcript.meeting_id == meeting_id,
-    ).order_by(models.Transcript.created_at.desc()).first()
     segments_to_save = segments if isinstance(segments, list) else []
-    if db_transcript:
-        if not segments_to_save and db_transcript.segments:
-            segments_to_save = [
-                {
-                    "speaker": segment.speaker_label,
-                    "start": float(segment.start_time or 0),
-                    "end": float(segment.end_time or 0),
-                    "text": segment.text,
-                    "language": getattr(segment, "language", None) or language,
-                    "confidence": float(segment.confidence_score) if segment.confidence_score is not None else None,
-                }
-                for segment in db_transcript.segments
-                if (segment.text or "").strip()
-            ]
-        db_transcript.content = full_text
-        db_transcript.language = language
-        db_transcript.word_count = len(full_text.split())
-        db_transcript.processing_status = "COMPLETED"
-        db_transcript.stt_provider = os.getenv("STT_PROVIDER", "deepgram")
-        db_transcript.post_processed = post_processed
-        db_transcript.nlp_metadata = nlp_metadata
-        if segments_to_save:
-            db.query(models.TranscriptSegment).filter(
-                models.TranscriptSegment.transcript_id == db_transcript.id,
-            ).delete(synchronize_session=False)
-            db.flush()
-    else:
-        db_transcript = create_transcript(db, {
-            "meeting_id": meeting_id,
-            "content": full_text,
-            "language": language,
-            "word_count": len(full_text.split()),
-            "processing_status": "COMPLETED",
-            "stt_provider": os.getenv("STT_PROVIDER", "deepgram"),
-            "post_processed": post_processed,
-            "nlp_metadata": nlp_metadata,
-        })
-
-    if segments_to_save:
-        segments_data = []
-        for seg in segments_to_save:
-            normalized = normalize_segment_payload(seg, language)
-            if not normalized["text"]:
-                continue
-            segments_data.append({
-                "transcript_id": db_transcript.id,
-                **normalized,
+    if db_transcript and not segments_to_save and db_transcript.segments:
+        segments_to_save = [
+            {
+                "speaker": segment.speaker_label,
+                "start": float(segment.start_time or 0),
+                "end": float(segment.end_time or 0),
+                "text": segment.text,
+                "language": getattr(segment, "language", None) or language,
+                "confidence": float(segment.confidence_score) if segment.confidence_score is not None else None,
+            }
+            for segment in db_transcript.segments
+            if (segment.text or "").strip()
+        ]
+    if persist_transcript:
+        if db_transcript:
+            db_transcript.content = full_text
+            db_transcript.language = language
+            db_transcript.word_count = len(full_text.split())
+            db_transcript.processing_status = "COMPLETED"
+            db_transcript.stt_provider = os.getenv("STT_PROVIDER", "deepgram")
+            db_transcript.post_processed = post_processed
+            db_transcript.nlp_metadata = nlp_metadata
+            if segments_to_save:
+                db.query(models.TranscriptSegment).filter(
+                    models.TranscriptSegment.transcript_id == db_transcript.id,
+                ).delete(synchronize_session=False)
+                db.flush()
+        else:
+            db_transcript = create_transcript(db, {
+                "meeting_id": meeting_id,
+                "content": full_text,
+                "language": language,
+                "word_count": len(full_text.split()),
+                "processing_status": "COMPLETED",
+                "stt_provider": os.getenv("STT_PROVIDER", "deepgram"),
+                "post_processed": post_processed,
+                "nlp_metadata": nlp_metadata,
             })
-        if segments_data:
-            create_transcript_segments_bulk(db, segments_data)
 
-    db.commit()
+        if segments_to_save:
+            segments_data = []
+            for seg in segments_to_save:
+                normalized = normalize_segment_payload(seg, language)
+                if not normalized["text"]:
+                    continue
+                segments_data.append({
+                    "transcript_id": db_transcript.id,
+                    **normalized,
+                })
+            if segments_data:
+                create_transcript_segments_bulk(db, segments_data)
+
+        db.commit()
 
     audio_file_id = None
-    try:
-        from src.api.core.meeting_operations import AUDIO_UPLOAD_DIR, LEGACY_AUDIO_UPLOAD_DIR
+    if persist_transcript:
+        try:
+            from src.api.core.meeting_operations import AUDIO_UPLOAD_DIR, LEGACY_AUDIO_UPLOAD_DIR
 
-        canonical_dir = os.path.join(AUDIO_UPLOAD_DIR, meeting_id)
-        legacy_dir = os.path.join(LEGACY_AUDIO_UPLOAD_DIR, meeting_id)
-        perm_dir = canonical_dir
-        if not os.path.isdir(perm_dir) and os.path.isdir(legacy_dir):
-            logger.info(f"Using legacy audio directory for meeting {meeting_id}: {legacy_dir}")
-            perm_dir = legacy_dir
-        if os.path.isdir(perm_dir):
-            chunk_files = sorted(glob.glob(os.path.join(perm_dir, "chunk_*")) + glob.glob(os.path.join(perm_dir, "stream_*.wav")))
-            if chunk_files:
-                logger.info(f"Concatenating {len(chunk_files)} audio chunks for meeting {meeting_id}")
-                normalized_files = _normalize_chunks_for_concat(chunk_files, perm_dir)
-                files_to_concat = normalized_files if normalized_files else chunk_files
-                try:
-                    concat_list_path = os.path.join(perm_dir, "concat.txt")
-                    with open(concat_list_path, "w") as f:
-                        for cf in files_to_concat:
-                            f.write(f"file '{cf}'\n")
+            canonical_dir = os.path.join(AUDIO_UPLOAD_DIR, meeting_id)
+            legacy_dir = os.path.join(LEGACY_AUDIO_UPLOAD_DIR, meeting_id)
+            perm_dir = canonical_dir
+            if not os.path.isdir(perm_dir) and os.path.isdir(legacy_dir):
+                logger.info(f"Using legacy audio directory for meeting {meeting_id}: {legacy_dir}")
+                perm_dir = legacy_dir
+            if os.path.isdir(perm_dir):
+                chunk_files = sorted(glob.glob(os.path.join(perm_dir, "chunk_*")) + glob.glob(os.path.join(perm_dir, "stream_*.wav")))
+                if chunk_files:
+                    logger.info(f"Concatenating {len(chunk_files)} audio chunks for meeting {meeting_id}")
+                    normalized_files = _normalize_chunks_for_concat(chunk_files, perm_dir)
+                    files_to_concat = normalized_files if normalized_files else chunk_files
+                    try:
+                        concat_list_path = os.path.join(perm_dir, "concat.txt")
+                        with open(concat_list_path, "w") as f:
+                            for cf in files_to_concat:
+                                f.write(f"file '{cf}'\n")
 
-                    output_filename = f"recording_{meeting_id}.wav"
-                    output_path = os.path.join(perm_dir, output_filename)
-                    subprocess.run(
-                        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list_path,
-                         "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", output_path],
-                        capture_output=True, timeout=120, check=True,
-                    )
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                        file_size = os.path.getsize(output_path)
-                        audio_record = create_audio_file(db, {
-                            "meeting_id": meeting_id,
-                            "filename": output_filename,
-                            "original_filename": "meeting_recording.wav",
-                            "file_path": output_path,
-                            "file_size": file_size,
-                            "format": "WAV",
-                            "sample_rate": 16000,
-                            "channels": 1,
-                            "upload_status": "PROCESSED",
-                        })
-                        audio_file_id = audio_record.id
-                        audio_stream_url = f"/api/audio-files/{audio_file_id}/stream"
-                        update_meeting(db, meeting_id, {
-                            "audio_url": audio_stream_url,
-                            "recording_url": audio_stream_url,
-                        })
-                        db.commit()
-                        logger.info(f"Audio recording saved: {output_path} ({file_size} bytes)")
+                        output_filename = f"recording_{meeting_id}.wav"
+                        output_path = os.path.join(perm_dir, output_filename)
+                        subprocess.run(
+                            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list_path,
+                             "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", output_path],
+                            capture_output=True, timeout=120, check=True,
+                        )
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                            file_size = os.path.getsize(output_path)
+                            audio_record = create_audio_file(db, {
+                                "meeting_id": meeting_id,
+                                "filename": output_filename,
+                                "original_filename": "meeting_recording.wav",
+                                "file_path": output_path,
+                                "file_size": file_size,
+                                "format": "WAV",
+                                "sample_rate": 16000,
+                                "channels": 1,
+                                "upload_status": "PROCESSED",
+                            })
+                            audio_file_id = audio_record.id
+                            audio_stream_url = f"/api/audio-files/{audio_file_id}/stream"
+                            update_meeting(db, meeting_id, {
+                                "audio_url": audio_stream_url,
+                                "recording_url": audio_stream_url,
+                            })
+                            db.commit()
+                            logger.info(f"Audio recording saved: {output_path} ({file_size} bytes)")
 
-                        for cf in chunk_files:
+                            for cf in chunk_files:
+                                try:
+                                    os.unlink(cf)
+                                except OSError:
+                                    pass
                             try:
-                                os.unlink(cf)
+                                os.unlink(concat_list_path)
                             except OSError:
                                 pass
-                        try:
-                            os.unlink(concat_list_path)
-                        except OSError:
-                            pass
-                    else:
-                        logger.warning(f"ffmpeg concat produced empty output for meeting {meeting_id}")
-                finally:
-                    # Clean up temp normalized files (not the originals)
-                    norm_set = set(normalized_files)
-                    for nf in norm_set:
-                        if nf not in chunk_files:
-                            try:
-                                os.unlink(nf)
-                            except OSError:
-                                pass
+                        else:
+                            logger.warning(f"ffmpeg concat produced empty output for meeting {meeting_id}")
+                    finally:
+                        norm_set = set(normalized_files)
+                        for nf in norm_set:
+                            if nf not in chunk_files:
+                                try:
+                                    os.unlink(nf)
+                                except OSError:
+                                    pass
+                else:
+                    logger.info(f"No audio chunks found for meeting {meeting_id}")
             else:
-                logger.info(f"No audio chunks found for meeting {meeting_id}")
-        else:
-            logger.info(f"No audio directory found for meeting {meeting_id}")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"ffmpeg concat failed for meeting {meeting_id}: {e.stderr}")
-    except Exception as e:
-        logger.error(f"Audio concatenation failed for meeting {meeting_id}: {e}")
+                logger.info(f"No audio directory found for meeting {meeting_id}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"ffmpeg concat failed for meeting {meeting_id}: {e.stderr}")
+        except Exception as e:
+            logger.error(f"Audio concatenation failed for meeting {meeting_id}: {e}")
 
     summary_status = "FAILED"
     summary_payload = schemas.MeetingAnalysisOutput(
@@ -457,11 +478,12 @@ async def finalize_meeting_transcript(
     router = RouterLLMAdapter()
 
     if not generate_summary:
-        try:
-            update_meeting(db, meeting_id, {"status": "completed"})
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-        db.commit()
+        if complete_meeting:
+            try:
+                update_meeting(db, meeting_id, {"status": "completed"})
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+            db.commit()
         return {
             "meeting_id": meeting_id,
             "transcript_status": "COMPLETED",
@@ -484,6 +506,8 @@ async def finalize_meeting_transcript(
         custom_instruction,
         language,
         nlp_metadata,
+        source_language=normalize_meeting_language(req_language or language),
+        include_action_items=generate_action_items,
     )
 
     raw_response = None
@@ -579,7 +603,8 @@ async def finalize_meeting_transcript(
     if summary_db:
         for key, value in summary_data.items():
             setattr(summary_db, key, value)
-        db.query(models.ActionItem).filter(models.ActionItem.summary_id == summary_db.id).delete(synchronize_session=False)
+        if generate_action_items:
+            db.query(models.ActionItem).filter(models.ActionItem.summary_id == summary_db.id).delete(synchronize_session=False)
         db.flush()
     else:
         summary_db = create_meeting_summary(db, {"meeting_id": meeting_id, **summary_data})
@@ -617,14 +642,15 @@ async def finalize_meeting_transcript(
                 "priority": "MEDIUM",
             }, created_by=current_user.id)
 
-    final_meeting_status = "completed" if summary_status == "COMPLETED" else "failed" if regenerate else "completed"
-    if regenerate and original_meeting_status == "completed" and summary_status != "COMPLETED":
-        final_meeting_status = "completed"
-    try:
-        update_meeting(db, meeting_id, {"status": final_meeting_status})
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    db.commit()
+    if complete_meeting:
+        final_meeting_status = "completed" if summary_status == "COMPLETED" else "failed" if regenerate else "completed"
+        if regenerate and original_meeting_status == "completed" and summary_status != "COMPLETED":
+            final_meeting_status = "completed"
+        try:
+            update_meeting(db, meeting_id, {"status": final_meeting_status})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        db.commit()
     summary_broadcast_payload = format_summary_payload(summary_db) or {
         "meeting_summary": summary_payload.meeting_summary,
         "key_points": summary_payload.key_points,
@@ -658,4 +684,106 @@ async def finalize_meeting_transcript(
         "summary": summary_payload,
         "nlp_metadata": nlp_metadata,
         "errors": errors,
+        "language": language,
+    }
+
+
+async def generate_meeting_ai_notes_all_languages(
+    meeting_id: str,
+    db: Session,
+    current_user: models.User,
+    body: Optional[Dict[str, Any]] = None,
+):
+    body = dict(body or {})
+    requested = body.get("languages") or SUPPORTED_MEETING_LANGUAGES
+    languages = []
+    for language in requested:
+        normalized = normalize_meeting_language(str(language))
+        if normalized not in languages:
+            languages.append(normalized)
+    if not languages:
+        languages = list(SUPPORTED_MEETING_LANGUAGES)
+
+    canonical_language = CANONICAL_ACTION_ITEM_LANGUAGE if CANONICAL_ACTION_ITEM_LANGUAGE in languages else languages[0]
+    base_body = dict(body)
+    base_body.pop("languages", None)
+    base_body["language"] = canonical_language
+    base_body["generate_action_items"] = bool(body.get("generate_action_items", True))
+    base_body["persist_transcript"] = True
+    base_body["complete_meeting"] = False
+
+    canonical_result = await finalize_meeting_transcript(meeting_id, db, current_user, base_body)
+    per_language = {canonical_language: canonical_result}
+    errors: List[str] = list(canonical_result.get("errors") or [])
+
+    transcript = body.get("transcript")
+    segments = body.get("segments")
+    if not transcript or not segments:
+        latest_transcript = db.query(models.Transcript).filter(
+            models.Transcript.meeting_id == meeting_id,
+        ).order_by(models.Transcript.created_at.desc()).first()
+        if latest_transcript:
+            transcript = transcript or latest_transcript.content
+            if not segments:
+                segments = [
+                    {
+                        "speaker": segment.speaker_label,
+                        "start": float(segment.start_time or 0),
+                        "end": float(segment.end_time or 0),
+                        "text": segment.text,
+                        "language": segment.language or canonical_language,
+                        "confidence": float(segment.confidence_score) if segment.confidence_score is not None else None,
+                    }
+                    for segment in latest_transcript.segments
+                    if (segment.text or "").strip()
+                ]
+
+    for language in languages:
+        if language == canonical_language:
+            continue
+        translated_body = dict(base_body)
+        translated_body.update({
+            "language": language,
+            "transcript": transcript or "",
+            "segments": segments or [],
+            "persist_transcript": False,
+            "generate_action_items": False,
+            "generate_summary": True,
+            "complete_meeting": False,
+        })
+        result = await finalize_meeting_transcript(meeting_id, db, current_user, translated_body)
+        per_language[language] = result
+        errors.extend(result.get("errors") or [])
+
+    completed = [language for language, result in per_language.items() if result.get("summary_status") == "COMPLETED"]
+    aggregate_status = "COMPLETED" if len(completed) == len(languages) else "PARTIAL" if completed else "FAILED"
+
+    original_status = db.query(models.Meeting.status).filter(models.Meeting.id == meeting_id).scalar()
+    final_status = "completed" if completed or original_status == "completed" else "failed"
+    try:
+        from src.api.crud import update_meeting
+        update_meeting(db, meeting_id, {"status": final_status})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.commit()
+
+    canonical_payload = per_language.get(canonical_language, canonical_result)
+    return {
+        "meeting_id": meeting_id,
+        "transcript_status": canonical_payload.get("transcript_status", "COMPLETED"),
+        "summary_status": aggregate_status,
+        "has_transcript_draft": canonical_payload.get("has_transcript_draft", False),
+        "summary": canonical_payload.get("summary"),
+        "nlp_metadata": canonical_payload.get("nlp_metadata"),
+        "errors": errors,
+        "languages": languages,
+        "per_language": {
+            language: {
+                "summary_status": result.get("summary_status"),
+                "transcript_status": result.get("transcript_status"),
+                "errors": result.get("errors", []),
+                "summary": result.get("summary"),
+            }
+            for language, result in per_language.items()
+        },
     }

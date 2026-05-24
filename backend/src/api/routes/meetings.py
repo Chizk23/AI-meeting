@@ -20,7 +20,9 @@ from src.api.core.meeting_operations import (
     get_meeting_access_mode,
     get_attended_participants,
     get_ws_user,
+    ensure_meeting_audio_published,
     mark_participant_attended,
+    mark_participant_left,
     meeting_room_manager,
     normalize_meeting_datetime,
     require_meeting_manager,
@@ -37,7 +39,7 @@ from src.api.crud import (
 from src.api.core.admin_runtime import append_admin_audit_log
 from src.api.core.notifications_support import get_org_admin_recipient_ids, push_runtime_notification
 from src.api.database import get_db, SessionLocal
-from src.api.core.transcript_support import finalize_meeting_transcript
+from src.api.core.transcript_support import finalize_meeting_transcript, generate_meeting_ai_notes_all_languages
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["meetings"])
@@ -102,12 +104,14 @@ def list_meetings(
         joinedload(models.Meeting.group),
         joinedload(models.Meeting.created_by_user),
         joinedload(models.Meeting.participants).joinedload(models.MeetingParticipant.user),
+        joinedload(models.Meeting.audio_files),
+        joinedload(models.Meeting.transcripts),
         joinedload(models.Meeting.summaries),
         joinedload(models.Meeting.action_items),
     ).order_by(models.Meeting.created_at.desc()).offset(skip).limit(limit).all()
 
     # Enrich with computed fields for list view
-    user_lang = getattr(current_user, "language", None) or "vi"
+    user_lang = current_user.language or "vi"
     for m in meetings:
         m.group_name = m.group.name if m.group else None
         m.organization_name = m.organization.name if m.organization else None
@@ -115,6 +119,7 @@ def list_meetings(
         m.attended_participants = get_attended_participants(m)
         m.attended_participants_count = len(m.attended_participants)
         m.duration = compute_meeting_duration_minutes(m)
+        m.audio_status = ensure_meeting_audio_published(db, m)
         if m.summaries:
             # Prefer summary in user's language, fall back to any
             lang_match = [s for s in m.summaries if (s.language or "vi") == user_lang]
@@ -147,7 +152,7 @@ def get_meeting_by_code(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     require_meeting_room_access(db, current_user, meeting)
-    user_lang = getattr(current_user, "language", None) or "vi"
+    user_lang = current_user.language or "vi"
     return schemas.MeetingDetailResponse.model_validate(
         build_meeting_detail_payload(
             db,
@@ -168,7 +173,7 @@ def get_meeting(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     require_meeting_room_access(db, current_user, meeting)
-    user_lang = getattr(current_user, "language", None) or "vi"
+    user_lang = current_user.language or "vi"
     return schemas.MeetingDetailResponse.model_validate(
         build_meeting_detail_payload(
             db,
@@ -318,6 +323,7 @@ async def meeting_room_stream(
     db = SessionLocal()
     current_user: Optional[models.User] = None
     meeting: Optional[models.Meeting] = None
+    participant: Optional[models.MeetingParticipant] = None
     connected = False
     try:
         header_token = websocket.headers.get("authorization")
@@ -334,7 +340,7 @@ async def meeting_room_stream(
             logger.warning(
                 "Failed to mark participant attended for meeting %s and user %s: %s",
                 meeting_id,
-                getattr(current_user, "id", None),
+                current_user.id if current_user else None,
                 attendance_exc,
                 exc_info=True,
             )
@@ -434,6 +440,18 @@ async def meeting_room_stream(
     finally:
         if connected:
             left_user = await meeting_room_manager.disconnect(meeting_id, websocket)
+            try:
+                mark_participant_left(db, participant)
+                db.commit()
+            except Exception as attendance_exc:
+                logger.warning(
+                    "Failed to mark participant left for meeting %s and user %s: %s",
+                    meeting_id,
+                    current_user.id if current_user else None,
+                    attendance_exc,
+                    exc_info=True,
+                )
+                db.rollback()
             broadcast_participant_list_event(meeting_id)
             if left_user and current_user:
                 await meeting_room_manager.broadcast(
@@ -472,8 +490,9 @@ def create_meeting_endpoint(
             scheduled_end = scheduled_start  # duration tracked via actual_start/actual_end
 
     # Block meetings in the past (skip for instant live meetings)
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     if not is_instant and scheduled_start:
-        if scheduled_start < datetime.now(timezone.utc):
+        if scheduled_start < now_utc:
             raise HTTPException(status_code=400, detail="Không thể tạo cuộc họp trong quá khứ")
 
     # scheduled_end must be after scheduled_start (skip for instant)
@@ -626,7 +645,7 @@ async def end_meeting_endpoint(
 
     if target_status == "completed":
         try:
-            await finalize_meeting_transcript(meeting_id, db, current_user, {})
+            await generate_meeting_ai_notes_all_languages(meeting_id, db, current_user, {})
             db.expire_all()
             refreshed = get_meeting_by_id(db, meeting_id)
             if refreshed:
@@ -701,7 +720,8 @@ def update_meeting_endpoint(
         end = updates.get("scheduled_end", existing.scheduled_end)
         if start and end and end <= start:
             raise HTTPException(status_code=400, detail="Thời gian kết thúc phải sau thời gian bắt đầu")
-        if start and start < datetime.now(timezone.utc):
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        if start and start < now_utc:
             raise HTTPException(status_code=400, detail="Không thể chuyển cuộc họp về thời gian trong quá khứ")
 
     if updates.get("group_id"):
@@ -859,7 +879,22 @@ async def finalize_meeting(
     current_user=Depends(auth.get_current_user),
 ):
     body = await request.json()
-    return await finalize_meeting_transcript(meeting_id, db, current_user, body)
+    return await generate_meeting_ai_notes_all_languages(meeting_id, db, current_user, body)
+
+
+@router.post("/api/meetings/{meeting_id}/ai-notes/regenerate")
+async def regenerate_meeting_ai_notes(
+    meeting_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body["regenerate"] = True
+    return await generate_meeting_ai_notes_all_languages(meeting_id, db, current_user, body)
 
 
 @router.get("/api/meetings/{meeting_id}/dialect")
