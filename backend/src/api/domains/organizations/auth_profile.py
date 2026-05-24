@@ -2,7 +2,6 @@ import os
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, UploadFile, status
@@ -11,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from src.api import auth, models, schemas
 from src.api.config import get_config
+from src.api.core.app_state import AVATAR_UPLOAD_DIR
 from src.api.domains.admin.runtime import ADMIN_SYSTEM_SETTINGS, append_admin_audit_log
 from src.api.domains.organizations.invitations import resolve_pending_invitation_by_token
 from src.api.core.user_payloads import format_user_payload
@@ -25,7 +25,6 @@ from src.api.crud import (
     update_user,
 )
 
-AVATAR_UPLOAD_DIR = str(Path(__file__).resolve().parents[3] / "uploads" / "avatars")
 config = get_config()
 
 
