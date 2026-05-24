@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { Meeting, User } from '../../types';
+import { getMeetingJoinState, getMeetingStatusPresentation } from '../../utils/meetingFlow';
 
 interface MeetingCardProps {
   meeting: Meeting;
@@ -168,24 +169,29 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
   onDelete,
   canManage = false,
 }) => {
-  const status = statusConfig[meeting.status] || statusConfig.upcoming;
+  const presentation = getMeetingStatusPresentation(meeting);
+  const status = {
+    ...(statusConfig[meeting.status] || statusConfig.upcoming),
+    label: presentation.label,
+    accent: presentation.accentClass,
+    badge: presentation.badgeClass,
+    dot: presentation.dotClass,
+  };
   const start = safeDate(meeting.startTime);
   const durationMinutes = getEffectiveDurationMinutes(meeting);
-  const hasTranscript = Boolean(meeting.transcriptUrl || meeting.audioUrl || meeting.status === 'completed');
+  const hasTranscript = Boolean(meeting.transcriptUrl || meeting.summary || meeting.keyPoints?.length || meeting.decisions?.length);
+  const hasRecording = presentation.hasRecording;
   const hasAiNotes = Boolean(meeting.summary || meeting.keyPoints?.length || meeting.decisions?.length);
   const insightCount = (meeting.keyPoints?.length || 0) + (meeting.decisions?.length || 0);
   const actionCount = meeting.actionItemsCount || 0;
 
-  // Time-based join gating
-  const now = new Date();
-  const isStartingSoon = start.getTime() - now.getTime() <= 15 * 60 * 1000;
-  const isLive = meeting.status === 'live';
-  const canJoin = isLive || isStartingSoon;
+  const joinState = getMeetingJoinState(meeting);
+  const canJoin = joinState.canJoin;
 
   const effectiveStatus = meeting.status === 'upcoming' && !canJoin
-    ? { ...status, action: 'Chưa tới giờ', actionClass: 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200/20' }
-    : status;
-  const actionHref = canJoin ? status.href(meeting) : '#';
+    ? { ...status, action: joinState.label, actionClass: 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200/20' }
+    : { ...status, action: joinState.label };
+  const actionHref = joinState.href;
 
   return (
     <motion.article
@@ -297,9 +303,9 @@ const MeetingCard: React.FC<MeetingCardProps> = ({
           </div>
 
           {/* AI Badge Pills */}
-          {(hasTranscript || hasAiNotes || insightCount > 0 || actionCount > 0) && (
+          {(hasRecording || hasTranscript || hasAiNotes || insightCount > 0 || actionCount > 0) && (
             <div className="mt-4 flex flex-wrap gap-1.5 border-t border-gray-100 pt-3">
-              {hasTranscript && (
+              {hasRecording && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 text-emerald-700 font-bold text-[10px] px-2 py-0.5 border border-emerald-100 shadow-sm">
                   <FileText size={10} />
                   Bản ghi

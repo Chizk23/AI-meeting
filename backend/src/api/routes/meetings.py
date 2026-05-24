@@ -20,7 +20,9 @@ from src.api.core.meeting_operations import (
     get_meeting_access_mode,
     get_attended_participants,
     get_ws_user,
+    ensure_meeting_audio_published,
     mark_participant_attended,
+    mark_participant_left,
     meeting_room_manager,
     normalize_meeting_datetime,
     require_meeting_manager,
@@ -102,12 +104,14 @@ def list_meetings(
         joinedload(models.Meeting.group),
         joinedload(models.Meeting.created_by_user),
         joinedload(models.Meeting.participants).joinedload(models.MeetingParticipant.user),
+        joinedload(models.Meeting.audio_files),
+        joinedload(models.Meeting.transcripts),
         joinedload(models.Meeting.summaries),
         joinedload(models.Meeting.action_items),
     ).order_by(models.Meeting.created_at.desc()).offset(skip).limit(limit).all()
 
     # Enrich with computed fields for list view
-    user_lang = getattr(current_user, "language", None) or "vi"
+    user_lang = current_user.language or "vi"
     for m in meetings:
         m.group_name = m.group.name if m.group else None
         m.organization_name = m.organization.name if m.organization else None
@@ -115,6 +119,7 @@ def list_meetings(
         m.attended_participants = get_attended_participants(m)
         m.attended_participants_count = len(m.attended_participants)
         m.duration = compute_meeting_duration_minutes(m)
+        m.audio_status = ensure_meeting_audio_published(db, m)
         if m.summaries:
             # Prefer summary in user's language, fall back to any
             lang_match = [s for s in m.summaries if (s.language or "vi") == user_lang]
@@ -147,7 +152,7 @@ def get_meeting_by_code(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     require_meeting_room_access(db, current_user, meeting)
-    user_lang = getattr(current_user, "language", None) or "vi"
+    user_lang = current_user.language or "vi"
     return schemas.MeetingDetailResponse.model_validate(
         build_meeting_detail_payload(
             db,
@@ -168,7 +173,7 @@ def get_meeting(
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     require_meeting_room_access(db, current_user, meeting)
-    user_lang = getattr(current_user, "language", None) or "vi"
+    user_lang = current_user.language or "vi"
     return schemas.MeetingDetailResponse.model_validate(
         build_meeting_detail_payload(
             db,
@@ -318,6 +323,7 @@ async def meeting_room_stream(
     db = SessionLocal()
     current_user: Optional[models.User] = None
     meeting: Optional[models.Meeting] = None
+    participant: Optional[models.MeetingParticipant] = None
     connected = False
     try:
         header_token = websocket.headers.get("authorization")
@@ -334,7 +340,7 @@ async def meeting_room_stream(
             logger.warning(
                 "Failed to mark participant attended for meeting %s and user %s: %s",
                 meeting_id,
-                getattr(current_user, "id", None),
+                current_user.id if current_user else None,
                 attendance_exc,
                 exc_info=True,
             )
@@ -434,6 +440,18 @@ async def meeting_room_stream(
     finally:
         if connected:
             left_user = await meeting_room_manager.disconnect(meeting_id, websocket)
+            try:
+                mark_participant_left(db, participant)
+                db.commit()
+            except Exception as attendance_exc:
+                logger.warning(
+                    "Failed to mark participant left for meeting %s and user %s: %s",
+                    meeting_id,
+                    current_user.id if current_user else None,
+                    attendance_exc,
+                    exc_info=True,
+                )
+                db.rollback()
             broadcast_participant_list_event(meeting_id)
             if left_user and current_user:
                 await meeting_room_manager.broadcast(

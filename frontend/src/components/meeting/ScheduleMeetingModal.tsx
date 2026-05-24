@@ -1,15 +1,17 @@
 import React from 'react';
+import axios from 'axios';
 import { Calendar as CalendarIcon, Clock, Users } from 'lucide-react';
 import { Modal, Button, Input, Badge } from '../ui';
 import { useCalendarStore, useOrgStore, useAppStore } from '../../stores';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from '../ui/Toast';
-import { buildLocalDateTime, toLocalDateStr, toMeetingApiDateTime } from '../../utils/meetingDateTime';
+import { toLocalDateStr, toMeetingApiDateTime } from '../../utils/meetingDateTime';
 import { useGroupMembers } from '../../hooks/useGroupMembers';
 import GroupSelector from './GroupSelector';
 import ParticipantSelector from './ParticipantSelector';
 import AIConfigSection from './AIConfigSection';
+import { validateMeetingForm } from '../../utils/meetingFlow';
 
 const ScheduleMeetingModal: React.FC = () => {
   const { isScheduleModalOpen, toggleScheduleModal, selectedDate } = useCalendarStore();
@@ -31,6 +33,7 @@ const ScheduleMeetingModal: React.FC = () => {
     if (isScheduleModalOpen) {
       if (currentOrgId) loadGroups(currentOrgId);
       setDate(toLocalDateStr(selectedDate));
+      setTime(selectedDate ? `${String(selectedDate.getHours()).padStart(2, '0')}:${String(selectedDate.getMinutes()).padStart(2, '0')}` : '14:00');
     }
   }, [isScheduleModalOpen, currentOrgId, loadGroups, selectedDate]);
 
@@ -40,23 +43,18 @@ const ScheduleMeetingModal: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title) { toast.error('Vui lòng nhập tiêu đề cuộc họp'); return; }
-    if (!selectedGroupId || !currentOrgId) { toast.error('Vui lòng chọn nhóm và tổ chức'); return; }
-
-    const start = buildLocalDateTime(date, time);
-    if (start.getTime() < Date.now()) { toast.error('Không thể tạo cuộc họp trong quá khứ'); return; }
+    if (!currentOrgId) { toast.error('Vui lòng chọn tổ chức'); return; }
+    const validation = validateMeetingForm({ title, groupId: selectedGroupId, date, time, endTime });
+    if (validation.ok === false) { toast.error(validation.message); return; }
 
     setIsSubmitting(true);
     try {
-      const end = endTime ? buildLocalDateTime(date, endTime) : new Date(start.getTime() + 3600000);
-      if (end <= start) { toast.error('Giờ kết thúc phải sau giờ bắt đầu'); setIsSubmitting(false); return; }
-
       await api.post('/api/meetings', {
-        title,
+        title: validation.title,
         organization_id: currentOrgId,
         group_id: selectedGroupId,
-        scheduled_start: toMeetingApiDateTime(start),
-        scheduled_end: toMeetingApiDateTime(end),
+        scheduled_start: toMeetingApiDateTime(validation.start),
+        scheduled_end: toMeetingApiDateTime(validation.end),
         status: 'upcoming',
         description: `Cuộc họp lên lịch trong nhóm ${groups.find(g => g.id === selectedGroupId)?.name || selectedGroupId}`,
         settings: { enableRecord: true, enableSummary: true, language },
@@ -67,8 +65,9 @@ const ScheduleMeetingModal: React.FC = () => {
       await loadMeetings(currentOrgId);
       toggleScheduleModal(false);
       resetForm();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Lỗi khi lên lịch cuộc họp');
+    } catch (err) {
+      const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : undefined;
+      toast.error(detail || 'Lỗi khi lên lịch cuộc họp');
     } finally {
       setIsSubmitting(false);
     }
@@ -79,6 +78,18 @@ const ScheduleMeetingModal: React.FC = () => {
     setSelectedGroupId(''); setDate(toLocalDateStr(new Date()));
     setTime('14:00'); setEndTime(''); setLanguage('vi');
   };
+
+  const preview = validateMeetingForm({
+    title: title || 'Cuộc họp',
+    groupId: selectedGroupId || 'preview',
+    date,
+    time,
+    endTime,
+    now: new Date(0),
+  });
+  const previewText = preview.ok
+    ? `${preview.start.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })} - ${preview.end.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`
+    : 'Chọn ngày giờ hợp lệ';
 
   return (
     <Modal isOpen={isScheduleModalOpen} onClose={() => toggleScheduleModal(false)} title="Lên lịch cuộc họp" size="lg">
@@ -92,6 +103,12 @@ const ScheduleMeetingModal: React.FC = () => {
           <Input label="Ngày họp" type="date" value={date} onChange={(e) => setDate(e.target.value)} icon={<CalendarIcon size={16} />} />
           <Input label="Giờ bắt đầu" type="time" value={time} onChange={(e) => setTime(e.target.value)} icon={<Clock size={16} />} />
           <Input label="Giờ kết thúc" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} icon={<Clock size={16} />} placeholder="Mặc định: 1 giờ" />
+        </div>
+
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+          <div className="font-semibold text-gray-800 dark:text-slate-100">Preview lịch họp</div>
+          <div className="mt-1">{previewText}</div>
+          <div className="mt-1">{selectedParticipants.length + 1} người nhận lời mời · AI Notes và ghi âm luôn bật</div>
         </div>
 
         <div className="rounded-2xl border border-primary-100 bg-primary-50/30 p-5 dark:border-primary-900/30 dark:bg-primary-900/5">

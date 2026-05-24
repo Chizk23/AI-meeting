@@ -147,6 +147,13 @@ def mark_participant_attended(db: Session, participant: Optional[models.MeetingP
     db.flush()
 
 
+def mark_participant_left(db: Session, participant: Optional[models.MeetingParticipant]) -> None:
+    if not participant or participant.left_at:
+        return
+    participant.left_at = datetime.now(timezone.utc)
+    db.flush()
+
+
 def participant_display_name(participant: models.MeetingParticipant) -> str:
     user = participant.user
     return (

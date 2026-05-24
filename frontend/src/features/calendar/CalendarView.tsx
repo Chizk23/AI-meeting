@@ -1,8 +1,11 @@
 import React from 'react';
 import FullCalendar from '@fullcalendar/react';
+import type { EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core';
+import type { DateClickArg, EventResizeDoneArg } from '@fullcalendar/interaction';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
+import axios from 'axios';
 import viLocale from '@fullcalendar/core/locales/vi';
 import { Plus, Calendar as CalendarIcon, AlertCircle, Loader2 } from 'lucide-react';
 import { Card, Button } from '../../components/ui';
@@ -13,6 +16,7 @@ import api from '../../services/api';
 import { toast } from '../../components/ui/Toast';
 import type { Meeting } from '../../types';
 import { getMeetingEnd, getMeetingStart, toMeetingApiDateTime } from '../../utils/meetingDateTime';
+import { getMeetingStatusPresentation } from '../../utils/meetingFlow';
 
 const isEditableMeeting = (meeting?: Meeting) =>
   Boolean(meeting && meeting.status === 'upcoming');
@@ -33,19 +37,7 @@ const toCalendarEvent = (meeting: Meeting) => {
   const terminalStatus = ['completed', 'processing', 'queued', 'failed', 'canceled'].includes(meeting.status);
   const isPast = endDate.getTime() < now;
   const isLive = meeting.status === 'live' || (!terminalStatus && startDate.getTime() <= now && endDate.getTime() >= now);
-
-  let bgColor = '#3b82f6';
-  if (meeting.status === 'canceled') {
-    bgColor = '#64748b';
-  } else if (meeting.status === 'processing' || meeting.status === 'queued') {
-    bgColor = '#f59e0b';
-  } else if (meeting.status === 'failed') {
-    bgColor = '#e11d48';
-  } else if (meeting.status === 'completed' || isPast) {
-    bgColor = '#10b981';
-  } else if (isLive) {
-    bgColor = '#ef4444';
-  }
+  const bgColor = getMeetingStatusPresentation(meeting).calendarColor;
 
   return {
     id: meeting.id,
@@ -83,8 +75,9 @@ const CalendarView: React.FC = () => {
     setError(null);
     try {
       await loadMeetings(currentOrgId);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || 'Không thể tải lịch họp';
+    } catch (err) {
+      const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : undefined;
+      const message = detail || 'Không thể tải lịch họp';
       setError(message);
       toast.error(message);
     } finally {
@@ -118,21 +111,21 @@ const CalendarView: React.FC = () => {
   );
 
   const events = React.useMemo(
-    () => visibleMeetings.map(toCalendarEvent).filter(Boolean) as any[],
+    () => visibleMeetings.map(toCalendarEvent).filter(Boolean) as EventInput[],
     [visibleMeetings],
   );
 
-  const handleDateClick = (arg: any) => {
+  const handleDateClick = (arg: DateClickArg) => {
     setSelectedDate(arg.date);
     toggleScheduleModal(true);
   };
 
-  const handleEventClick = (arg: any) => {
+  const handleEventClick = (arg: EventClickArg) => {
     setSelectedMeetingId(arg.event.id);
     setIsPopupOpen(true);
   };
 
-  const handleEventDrop = async (arg: any) => {
+  const handleEventDrop = async (arg: EventDropArg) => {
     const { event } = arg;
     const meeting = visibleMeetings.find((item) => item.id === event.id);
     if (!isEditableMeeting(meeting)) {
@@ -148,15 +141,16 @@ const CalendarView: React.FC = () => {
       });
       toast.success('Đã cập nhật thời gian cuộc họp');
       await refreshMeetings();
-    } catch (err: any) {
+    } catch (err) {
+      const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : undefined;
       arg.revert();
-      toast.error(err.response?.data?.detail || 'Lỗi khi cập nhật thời gian');
+      toast.error(detail || 'Lỗi khi cập nhật thời gian');
     } finally {
       setIsUpdatingEvent(false);
     }
   };
 
-  const handleEventResize = async (arg: any) => {
+  const handleEventResize = async (arg: EventResizeDoneArg) => {
     const { event } = arg;
     const meeting = visibleMeetings.find((item) => item.id === event.id);
     if (!isEditableMeeting(meeting)) {
@@ -177,9 +171,10 @@ const CalendarView: React.FC = () => {
       });
       toast.success('Đã cập nhật thời lượng cuộc họp');
       await refreshMeetings();
-    } catch (err: any) {
+    } catch (err) {
+      const detail = axios.isAxiosError<{ detail?: string }>(err) ? err.response?.data?.detail : undefined;
       arg.revert();
-      toast.error(err.response?.data?.detail || 'Lỗi khi cập nhật thời lượng');
+      toast.error(detail || 'Lỗi khi cập nhật thời lượng');
     } finally {
       setIsUpdatingEvent(false);
     }
@@ -254,6 +249,14 @@ const CalendarView: React.FC = () => {
               <div className="flex items-center gap-2 text-xs font-medium">
                 <span className="w-3 h-3 rounded-full bg-red-500"></span>
                 <span className="text-gray-600 dark:text-slate-400">Đang diễn ra</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                <span className="text-gray-600 dark:text-slate-400">Đang xử lý</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <span className="w-3 h-3 rounded-full bg-rose-500"></span>
+                <span className="text-gray-600 dark:text-slate-400">Lỗi</span>
               </div>
            </div>
         </div>

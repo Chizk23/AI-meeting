@@ -562,11 +562,18 @@ const MeetingDetail: React.FC = () => {
   }, [pendingTranscriptAnchor, transcriptGroups, isAudioReady, hasMeetingAudio]);
 
   useEffect(() => {
-    if (!languageInitialized && meeting?.transcriptLanguage) {
-      setSummaryLanguage(meeting.transcriptLanguage);
+    setLanguageInitialized(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (!languageInitialized && meeting) {
+      const preferredLanguage = meeting.summaries.some((summary) => summary.language === 'vi')
+        ? 'vi'
+        : meeting.summaries[0]?.language || meeting.transcriptLanguage || 'vi';
+      setSummaryLanguage(preferredLanguage);
       setLanguageInitialized(true);
     }
-  }, [meeting?.transcriptLanguage, languageInitialized]);
+  }, [meeting, languageInitialized]);
 
   useEffect(() => {
     if (!exportLanguageInitialized) {

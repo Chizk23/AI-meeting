@@ -152,6 +152,47 @@ def test_get_meetings(client, auth_context):
     assert len(data) >= 2
 
 
+def test_list_meetings_includes_computed_audio_status(client, auth_context, tmp_path):
+    create_response = client.post(
+        "/api/meetings",
+        headers=auth_context["headers"],
+        json=meeting_payload(auth_context, title="Audio Ready", status="completed"),
+    )
+    meeting_id = create_response.json()["id"]
+    audio_path = tmp_path / "recording.wav"
+    audio_path.write_bytes(b"RIFF0000WAVE")
+
+    db = TestingSessionLocal()
+    try:
+        db.add(
+            models.AudioFile(
+                meeting_id=meeting_id,
+                filename="recording.wav",
+                original_filename="recording.wav",
+                file_path=str(audio_path),
+                file_size=audio_path.stat().st_size,
+                format="WAV",
+                upload_status="PROCESSED",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    list_response = client.get(
+        "/api/meetings",
+        headers=auth_context["headers"],
+        params={"organization_id": auth_context["org_id"]},
+    )
+    detail_response = client.get(f"/api/meetings/{meeting_id}", headers=auth_context["headers"])
+
+    listed = next(item for item in list_response.json() if item["id"] == meeting_id)
+    detail = detail_response.json()
+    assert listed["audio_status"] == "READY"
+    assert listed["audio_url"] == detail["audio_url"]
+    assert listed["recording_url"] == detail["recording_url"]
+
+
 def test_get_meeting_by_id(client, auth_context):
     create_response = client.post(
         "/api/meetings",
@@ -166,6 +207,53 @@ def test_get_meeting_by_id(client, auth_context):
     data = response.json()
     assert data["id"] == meeting_id
     assert data["title"] == "Test Meeting"
+
+
+def test_mark_participant_left_sets_left_at(client):
+    from src.api.core.meeting_operations import mark_participant_attended, mark_participant_left
+
+    db = TestingSessionLocal()
+    try:
+        user = models.User(
+            username="leave-user",
+            email="leave@example.com",
+            password_hash="hashed",
+            role="member",
+            date_of_birth=datetime(2000, 1, 1),
+        )
+        org = models.Organization(name="Leave Org")
+        db.add_all([user, org])
+        db.flush()
+        meeting = models.Meeting(
+            organization_id=org.id,
+            title="Leave Tracking",
+            status="live",
+            created_by=user.id,
+        )
+        db.add(meeting)
+        db.flush()
+        participant = models.MeetingParticipant(
+            meeting_id=meeting.id,
+            user_id=user.id,
+            invite_status="pending",
+        )
+        db.add(participant)
+        db.flush()
+
+        mark_participant_attended(db, participant)
+        db.commit()
+        assert participant.attended is True
+        assert participant.joined_at is not None
+        assert participant.left_at is None
+
+        mark_participant_left(db, participant)
+        db.commit()
+        db.refresh(participant)
+
+        assert participant.left_at is not None
+        assert participant.left_at >= participant.joined_at
+    finally:
+        db.close()
 
 
 def test_get_meeting_not_found(client, auth_context):
