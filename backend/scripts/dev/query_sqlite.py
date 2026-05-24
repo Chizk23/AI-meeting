@@ -1,7 +1,10 @@
 import sqlite3
+from pathlib import Path
+
+DB_PATH = Path(__file__).resolve().parents[2] / "multiminutes.db"
 
 def check_orgs():
-    conn = sqlite3.connect('multiminutes.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     print("--- Organizations ---")

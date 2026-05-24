@@ -2,7 +2,7 @@ import React from 'react';
 import { Calendar, Check, CheckCircle2, Circle, Pencil, Trash2, UserRound } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-import type { ActionItem, ActionItemAssigneeOption, User } from '../../types';
+import type { ActionItem, ActionItemAssigneeOption, User } from '../../../types';
 
 type ActionEditDraft = {
   title: string;

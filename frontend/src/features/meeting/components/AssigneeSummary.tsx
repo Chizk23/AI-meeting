@@ -1,6 +1,6 @@
 import React from 'react';
 
-import type { ActionItemAssignee } from '../../types/actionItem';
+import type { ActionItemAssignee } from '../../../types/actionItem';
 
 type AssigneeSummaryProps = {
   assignees: ActionItemAssignee[];

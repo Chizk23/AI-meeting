@@ -1,11 +1,11 @@
 import React from 'react';
 import { Calendar as CalendarIcon, Clock, Users, Check, User, ChevronDown } from 'lucide-react';
-import { Modal, Button, Input } from '../ui';
-import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
-import { toast } from '../ui/Toast';
-import type { Meeting } from '../../types';
-import { buildLocalDateTime, toLocalDateStr, toLocalTimeStr, toMeetingApiDateTime } from '../../utils/meetingDateTime';
+import { Modal, Button, Input } from '../../../components/ui';
+import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
+import { toast } from '../../../components/ui/Toast';
+import type { Meeting } from '../../../types';
+import { buildLocalDateTime, toLocalDateStr, toLocalTimeStr, toMeetingApiDateTime } from '../../../utils/meetingDateTime';
 
 interface GroupMember {
   id: string;

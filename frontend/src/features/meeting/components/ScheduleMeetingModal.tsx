@@ -1,17 +1,17 @@
 import React from 'react';
 import axios from 'axios';
 import { Calendar as CalendarIcon, Clock, Users } from 'lucide-react';
-import { Modal, Button, Input, Badge } from '../ui';
-import { useCalendarStore, useOrgStore, useAppStore } from '../../stores';
-import api from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
-import { toast } from '../ui/Toast';
-import { toLocalDateStr, toMeetingApiDateTime } from '../../utils/meetingDateTime';
-import { useGroupMembers } from '../../hooks/useGroupMembers';
+import { Modal, Button, Input, Badge } from '../../../components/ui';
+import { useCalendarStore, useOrgStore, useAppStore } from '../../../stores';
+import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
+import { toast } from '../../../components/ui/Toast';
+import { toLocalDateStr, toMeetingApiDateTime } from '../../../utils/meetingDateTime';
+import { useGroupMembers } from '../../../hooks/useGroupMembers';
 import GroupSelector from './GroupSelector';
 import ParticipantSelector from './ParticipantSelector';
 import AIConfigSection from './AIConfigSection';
-import { validateMeetingForm } from '../../utils/meetingFlow';
+import { validateMeetingForm } from '../../../utils/meetingFlow';
 
 const ScheduleMeetingModal: React.FC = () => {
   const { isScheduleModalOpen, toggleScheduleModal, selectedDate } = useCalendarStore();
