@@ -71,7 +71,7 @@ def _seed_transcript(db, age_days: int) -> models.Transcript:
 
 
 def test_purge_forever_policy_is_noop(db_session):
-    from src.api.core.retention import purge_transcripts_for_retention
+    from src.api.domains.meetings.retention import purge_transcripts_for_retention
 
     _seed_transcript(db_session, age_days=1000)
     deleted = purge_transcripts_for_retention(db_session, policy="forever")
@@ -80,7 +80,7 @@ def test_purge_forever_policy_is_noop(db_session):
 
 
 def test_purge_1y_policy_deletes_transcripts_older_than_365_days(db_session):
-    from src.api.core.retention import purge_transcripts_for_retention
+    from src.api.domains.meetings.retention import purge_transcripts_for_retention
 
     _seed_transcript(db_session, age_days=400)
     _seed_transcript(db_session, age_days=300)
@@ -95,7 +95,7 @@ def test_purge_1y_policy_deletes_transcripts_older_than_365_days(db_session):
 
 
 def test_purge_6m_policy_deletes_transcripts_older_than_180_days(db_session):
-    from src.api.core.retention import purge_transcripts_for_retention
+    from src.api.domains.meetings.retention import purge_transcripts_for_retention
 
     _seed_transcript(db_session, age_days=200)
     _seed_transcript(db_session, age_days=100)
@@ -107,7 +107,7 @@ def test_purge_6m_policy_deletes_transcripts_older_than_180_days(db_session):
 
 
 def test_purge_unknown_policy_is_noop(db_session):
-    from src.api.core.retention import purge_transcripts_for_retention
+    from src.api.domains.meetings.retention import purge_transcripts_for_retention
 
     _seed_transcript(db_session, age_days=400)
     deleted = purge_transcripts_for_retention(db_session, policy="not-a-real-policy")

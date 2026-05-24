@@ -18,7 +18,7 @@ def _get_db():
 async def reminder_loop():
     """Check every 60 seconds for upcoming meetings that need reminders."""
     from . import models
-    from src.api.core.notifications_support import push_runtime_notification
+    from src.api.domains.notifications.support import push_runtime_notification
 
     while True:
         db = _get_db()
@@ -127,7 +127,7 @@ async def status_transition_loop():
 
 async def retention_cleanup_loop():
     """Run the transcript retention purge once per day."""
-    from src.api.core.retention import purge_transcripts_for_retention
+    from src.api.domains.meetings.retention import purge_transcripts_for_retention
 
     # Stagger the first run by 60s to avoid contention with app boot.
     await asyncio.sleep(60)

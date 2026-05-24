@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from src.api import auth
-from src.api.core.notification_operations import (
+from src.api.domains.notifications.operations import (
     dismiss_notification_payload,
     get_notifications_payload,
     mark_all_notifications_read_payload,

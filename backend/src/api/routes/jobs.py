@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from src.api import auth
-from src.api.core.job_operations import get_job_status_payload, retry_job_payload
+from src.api.domains.jobs.operations import get_job_status_payload, retry_job_payload
 
 router = APIRouter(tags=["jobs"])
 

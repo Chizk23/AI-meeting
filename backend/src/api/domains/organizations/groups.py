@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from src.api import auth, models, schemas
 from src.api.domains.admin.runtime import append_admin_audit_log
-from src.api.core.notifications_support import create_persisted_notification, push_runtime_notification
+from src.api.domains.notifications.support import create_persisted_notification, push_runtime_notification
 from src.api.crud import (
     add_user_to_group,
     create_group,
