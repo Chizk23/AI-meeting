@@ -1,22 +1,16 @@
 import React from 'react';
-import { Globe, Zap, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Globe, Mic, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface AIConfigSectionProps {
   language: string;
   onLanguageChange: (lang: string) => void;
-  enableRecord?: boolean;
-  onToggleRecord?: () => void;
-  enableSummary?: boolean;
-  onToggleSummary?: () => void;
   children?: React.ReactNode;
-  hideToggles?: boolean;
 }
 
 const AIConfigSection: React.FC<AIConfigSectionProps> = ({
   language,
   onLanguageChange,
   children,
-  hideToggles = false,
 }) => (
   <div className="space-y-5">
     {/* Language */}
@@ -39,12 +33,10 @@ const AIConfigSection: React.FC<AIConfigSectionProps> = ({
     </div>
 
     {/* Always-on features */}
-    {!hideToggles && (
-      <div className="grid grid-cols-2 gap-3">
-        <AlwaysOnBadge icon={<Zap size={14} />} label="Ghi âm" />
-        <AlwaysOnBadge icon={<CheckCircle2 size={14} />} label="AI Tóm tắt" />
-      </div>
-    )}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <AlwaysOnBadge icon={<Mic size={14} />} label="Ghi âm" />
+      <AlwaysOnBadge icon={<CheckCircle2 size={14} />} label="AI biên bản" />
+    </div>
 
     {/* Extra toggles */}
     {children}

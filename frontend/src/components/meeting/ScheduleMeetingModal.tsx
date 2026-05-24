@@ -24,8 +24,6 @@ const ScheduleMeetingModal: React.FC = () => {
   const [endTime, setEndTime] = React.useState('');
   const [language, setLanguage] = React.useState('vi');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [enableRecord, setEnableRecord] = React.useState(true);
-  const [enableSummary, setEnableSummary] = React.useState(true);
 
   const { members, loading: loadingMembers, selectedIds: selectedParticipants, setSelectedIds: setSelectedParticipants, toggleSelectAll, toggleMember } = useGroupMembers(selectedGroupId, user?.id);
 
@@ -61,7 +59,7 @@ const ScheduleMeetingModal: React.FC = () => {
         scheduled_end: toMeetingApiDateTime(end),
         status: 'upcoming',
         description: `Cuộc họp lên lịch trong nhóm ${groups.find(g => g.id === selectedGroupId)?.name || selectedGroupId}`,
-        settings: { enableRecord, enableSummary, language },
+        settings: { enableRecord: true, enableSummary: true, language },
         participant_ids: selectedParticipants,
       });
 
@@ -80,7 +78,6 @@ const ScheduleMeetingModal: React.FC = () => {
     setTitle(''); setSelectedParticipants([]);
     setSelectedGroupId(''); setDate(toLocalDateStr(new Date()));
     setTime('14:00'); setEndTime(''); setLanguage('vi');
-    setEnableRecord(true); setEnableSummary(true);
   };
 
   return (
@@ -102,11 +99,7 @@ const ScheduleMeetingModal: React.FC = () => {
             <h4 className="text-sm font-bold text-primary-800 dark:text-primary-300">Cấu hình AI</h4>
             <Badge variant="primary" className="text-[10px]">Premium</Badge>
           </div>
-          <AIConfigSection
-            language={language} onLanguageChange={setLanguage}
-            enableRecord={enableRecord} onToggleRecord={() => setEnableRecord(!enableRecord)}
-            enableSummary={enableSummary} onToggleSummary={() => setEnableSummary(!enableSummary)}
-          />
+          <AIConfigSection language={language} onLanguageChange={setLanguage} />
         </div>
 
         <div className="space-y-3">
