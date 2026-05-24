@@ -18,7 +18,7 @@ import { Logo } from '../ui';
 import OrgSelector from './OrgSelector';
 import GroupNav from './GroupNav';
 import QuickAccess from './QuickAccess';
-import CreateGroupModal from '../group/CreateGroupModal';
+import CreateGroupModal from '../../features/groups/components/CreateGroupModal';
 
 interface SidebarProps {
   mobileOpen: boolean;
