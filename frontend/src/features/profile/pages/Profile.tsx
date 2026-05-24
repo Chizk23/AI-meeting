@@ -19,10 +19,10 @@ import {
   X,
 } from 'lucide-react';
 
-import { useAuth } from '../../context/AuthContext';
-import { useOrgStore } from '../../stores';
-import api from '../../services/api';
-import type { Organization } from '../../types';
+import { useAuth } from '../../../context/AuthContext';
+import { useOrgStore } from '../../../stores';
+import api from '../../../services/api';
+import type { Organization } from '../../../types';
 
 type ProfileTab = 'profile' | 'organizations' | 'notifications' | 'security';
 

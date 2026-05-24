@@ -8,12 +8,12 @@ import { useUIStore } from './stores';
 import Layout from './layouts/Layout';
 import AdminLayout from './layouts/AdminLayout';
 
-import Landing from './pages/Landing';
-const Login = React.lazy(() => import('./pages/Login'));
-const Register = React.lazy(() => import('./pages/Register'));
-const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
-const Invite = React.lazy(() => import('./pages/Invite'));
-const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+import Landing from './features/landing/pages/Landing';
+const Login = React.lazy(() => import('./features/auth/pages/Login'));
+const Register = React.lazy(() => import('./features/auth/pages/Register'));
+const ForgotPassword = React.lazy(() => import('./features/auth/pages/ForgotPassword'));
+const Invite = React.lazy(() => import('./features/auth/pages/Invite'));
+const Dashboard = React.lazy(() => import('./features/dashboard/pages/Dashboard'));
 const MeetingList = React.lazy(() => import('./features/meetings/pages/MeetingList'));
 const MeetingDetail = React.lazy(() => import('./features/meetings/pages/MeetingDetail'));
 const Calendar = React.lazy(() => import('./features/calendar/pages/Calendar'));
@@ -21,10 +21,10 @@ const CreateMeeting = React.lazy(() => import('./features/meetings/pages/CreateM
 const MeetingRoom = React.lazy(() => import('./features/meeting-room/pages/MeetingRoom'));
 const JoinMeeting = React.lazy(() => import('./features/meetings/pages/JoinMeeting'));
 const UploadAudio = React.lazy(() => import('./features/meetings/pages/UploadAudio'));
-const Notifications = React.lazy(() => import('./pages/Notifications'));
+const Notifications = React.lazy(() => import('./features/notifications/pages/Notifications'));
 const ActionItems = React.lazy(() => import('./features/action-items/pages/ActionItems'));
-const NotFound = React.lazy(() => import('./pages/NotFound'));
-const Forbidden = React.lazy(() => import('./pages/Forbidden'));
+const NotFound = React.lazy(() => import('./features/system/pages/NotFound'));
+const Forbidden = React.lazy(() => import('./features/system/pages/Forbidden'));
 const GroupDetail = React.lazy(() => import('./features/groups/pages/GroupDetail'));
 const CreateGroup = React.lazy(() => import('./features/groups/pages/CreateGroup'));
 const OrgAdminConsole = React.lazy(() => import('./features/organizations/pages/OrgAdminConsole'));
@@ -38,8 +38,8 @@ const AdminPrompts = React.lazy(() => import('./features/admin/components/AdminP
 const AdminNotifications = React.lazy(() => import('./features/admin/components/AdminNotifications'));
 const AdminAuditLogs = React.lazy(() => import('./features/admin/components/AdminAuditLogs'));
 const AdminSettings = React.lazy(() => import('./features/admin/components/AdminSettings'));
-const OrganizationSetup = React.lazy(() => import('./pages/OrganizationSetup'));
-const Profile = React.lazy(() => import('./pages/profile/Profile'));
+const OrganizationSetup = React.lazy(() => import('./features/onboarding/pages/OrganizationSetup'));
+const Profile = React.lazy(() => import('./features/profile/pages/Profile'));
 
 const queryClient = new QueryClient({
   defaultOptions: {

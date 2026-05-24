@@ -1,10 +1,10 @@
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Building2, Mail, Shield, User, Eye, ArrowRight } from 'lucide-react';
-import { Button, Logo } from '../components/ui';
-import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useOrgStore } from '../stores';
+import { Button, Logo } from '../../../components/ui';
+import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
+import { useOrgStore } from '../../../stores';
 
 interface InvitationPreview {
   email: string;

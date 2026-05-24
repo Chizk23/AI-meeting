@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import {
   Loader2,
@@ -19,11 +19,11 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { StatCard, Button, AnimatedCounter } from "../components/ui";
-import { useOrgStore } from "../stores";
-import { useAppStore } from "../stores";
-import { usePermission } from "../hooks";
-import MeetingCard from "../features/meeting/components/MeetingCard";
+import { StatCard, Button, AnimatedCounter } from "../../../components/ui";
+import { useOrgStore } from "../../../stores";
+import { useAppStore } from "../../../stores";
+import { usePermission } from "../../../hooks";
+import MeetingCard from "../../meeting/components/MeetingCard";
 import { clsx } from "clsx";
 
 const Dashboard: React.FC = () => {

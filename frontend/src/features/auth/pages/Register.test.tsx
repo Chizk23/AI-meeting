@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import Register from './Register';
 
 const registerAndSetSessionMock = vi.fn();
-vi.mock('../context/AuthContext', () => ({
+vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => ({
     registerAndSetSession: registerAndSetSessionMock,
   }),
@@ -12,7 +12,7 @@ vi.mock('../context/AuthContext', () => ({
 
 const postMock = vi.fn();
 const getMock = vi.fn();
-vi.mock('../services/api', () => ({
+vi.mock('../../../services/api', () => ({
   default: {
     post: (...args: unknown[]) => postMock(...args),
     get: (...args: unknown[]) => getMock(...args),

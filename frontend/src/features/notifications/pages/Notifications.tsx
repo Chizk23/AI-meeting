@@ -17,10 +17,10 @@ import {
   FolderOpen,
   Loader2,
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useOrgStore } from '../stores';
-import api from '../services/api';
-import { PageState } from '../components/ui';
+import { useAuth } from '../../../context/AuthContext';
+import { useOrgStore } from '../../../stores';
+import api from '../../../services/api';
+import { PageState } from '../../../components/ui';
 
 type NotificationType = 'meeting' | 'mention' | 'system' | 'user' | 'invitation';
 type NotificationPriority = 'urgent' | 'today' | 'recent';

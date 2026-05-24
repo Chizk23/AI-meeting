@@ -4,9 +4,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Check, Mail, Lock, ArrowRight, Eye, EyeOff, UserRound, Phone, CalendarDays, Mic, Sparkles, Users, ShieldCheck } from 'lucide-react';
-import { Button, Input, Logo } from '../components/ui';
-import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import { Button, Input, Logo } from '../../../components/ui';
+import api from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 const registerSchema = z
   .object({
